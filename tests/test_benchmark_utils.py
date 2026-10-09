@@ -678,3 +678,18 @@ def test_rnalocate_location_mapping_prefers_specific_structures():
     assert map_loc_to_l1("Nuclear pore complex") == "NUC_PORE"
     assert map_loc_to_l1("Nuclear speckle") == "NUCLEUS"
     assert map_loc_to_l1("Ribosome") == "RIBOSOME_CYTO"
+
+
+def test_consensus_selection_is_not_decided_by_near_ties():
+    from cellscope.consensus_clustering import _finest_near_best
+
+    candidates = [
+        {"resolution": 2.0, "stability_ari": 0.560, "n_clusters": 62},
+        {"resolution": 4.0, "stability_ari": 0.509, "n_clusters": 96},
+        {"resolution": 8.0, "stability_ari": 0.541, "n_clusters": 169},
+        {"resolution": 1.0, "stability_ari": 0.300, "n_clusters": 44},
+    ]
+    # Candidates within tolerance are equivalent; the finest one wins even
+    # when a coarser one is nominally (not meaningfully) more stable.
+    assert _finest_near_best(candidates, "stability_ari", 0.10)["resolution"] == 8.0
+    assert _finest_near_best(candidates, "stability_ari", 0.0)["resolution"] == 2.0

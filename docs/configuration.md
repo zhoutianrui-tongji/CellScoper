@@ -303,7 +303,9 @@ A legacy configuration without `omm_policy` keeps its former behavior:
 - `enforce_spatial_connectivity` (bool): Build every final `metaspot` as a connected XY region using spatially constrained Ward clustering.
 - `partition_by_nucleus` (bool): Allocate the cell-level MetaSpot budget
   across nucleus and cytoplasm before clustering. When enabled, a MetaSpot
-  cannot cross the nuclear boundary. Default: `false`.
+  cannot cross the nuclear boundary. Packaged default: `true`; without it a
+  boundary-straddling MetaSpot takes the majority compartment and mislabels
+  the minority transcripts.
 - `target_sites_per_metaspot` (int|null): Target number of unique XY sites per MetaSpot. When set, this determines the requested per-cell K before connected-component merging and bypasses HDBSCAN as the primary segmenter. Packaged default: `20`.
 - `min_metaspots_per_cell` (int): Lower bound for the requested per-cell K. Packaged default: `10`.
 - `max_metaspots_per_cell` (int|null): Upper bound for the per-cell K. Default: `100`.
@@ -358,10 +360,13 @@ MetaDomains. The default `params.yaml` remains the production profile.
   both endpoints of a mutual-kNN edge in the same cluster before that edge is
   retained in the consensus graph. Default: `2/3`.
 - `consensus_min_stability` (float) and `consensus_stability_tolerance`
-  (float): require a cross-seed ARI of at least `0.55`, then retain the finest
-  feasible candidate no more than `0.10` below the best feasible ARI. This
-  avoids choosing a biologically uninformative coarse partition for a tiny
-  numerical stability advantage.
+  (float): retain the finest feasible candidate no more than `0.10` below the
+  best feasible ARI. This avoids choosing a biologically uninformative coarse
+  partition for a tiny numerical stability advantage. `consensus_min_stability`
+  (`0.55`) is reported, not enforced: when the selected resolution falls below
+  it, a warning is logged and `stability_floor_met` is `false` in the stored
+  metadata. Using it as a hard gate made identical runs switch resolution,
+  because seed-pair ARIs carry a few hundredths of noise.
 - Consensus evidence is stored in
   `adata1.uns["module5_metadomain_clustering"]["consensus_by_block"]` and, when
   diagnostics are enabled, in `metadomain_consensus_leiden_diagnostics.png`

@@ -184,9 +184,11 @@ module3:
   # 强制 MetaSpot 空间连通
   enforce_spatial_connectivity: true
 
-  # 不预先按 nucleus / cytoplasm 硬切 MetaSpot
-  # 保留局部结构发现能力
-  partition_by_nucleus: false
+  # 按细胞核多边形把 MetaSpot 预算分配到核内/核外，MetaSpot 不跨越核膜。
+  # 关闭时约 30% 的 MetaSpot 同时含核内外转录本，其核质归属取多数票，
+  # 少数派被整体标错（2k-cell Xenium 审计：核质准确率 0.896 -> 0.951，
+  # 留出标志基因富集无下降）。
+  partition_by_nucleus: true
 
   # 核心 MetaSpot 粒度参数
   # 平均约每 10 个 unique transcript sites 形成一个 MetaSpot。
@@ -320,8 +322,10 @@ module5:
   # 三个随机种子中至少两个同意该 mutual-kNN 边，才进入最终 consensus 图。
   consensus_edge_agreement: 0.6666667
 
-  # 先要求跨 seed ARI 至少达到 0.55；在距离最佳稳定性不超过 0.10 的
-  # 可行候选中选择结构最细者，避免微小 ARI 优势系统性偏向过粗分区。
+  # 在距离最佳稳定性不超过 0.10 的可行候选中选择结构最细者，避免微小 ARI
+  # 优势系统性偏向过粗分区。consensus_min_stability 只用于报告与告警
+  # （uns 中的 stability_floor_met）：跨 seed ARI 本身有百分之几的噪声，
+  # 把 0.55 作为硬门槛会让同一配置的两次运行在最细与最粗分辨率之间跳变。
   consensus_min_stability: 0.55
   consensus_stability_tolerance: 0.10
 

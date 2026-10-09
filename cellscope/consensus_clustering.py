@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from itertools import combinations
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
@@ -154,6 +155,22 @@ def _partition_diagnostics(
     }
 
 
+def _finest_near_best(
+    candidates: Sequence[Mapping[str, Any]],
+    key: str,
+    tolerance: float,
+) -> Mapping[str, Any]:
+    """Pick the finest candidate whose ``key`` is within tolerance of the best."""
+    best = max(item[key] for item in candidates)
+    near_best = [
+        item for item in candidates if item[key] >= best - float(tolerance)
+    ]
+    return max(
+        near_best,
+        key=lambda item: (item["n_clusters"], item[key], item["resolution"]),
+    )
+
+
 def run_stability_consensus_leiden(
     values: np.ndarray,
     cell_ids: Sequence[Any],
@@ -293,52 +310,36 @@ def run_stability_consensus_leiden(
         )
 
     feasible_candidates = [item for item in candidates if item["feasible"]]
-    selected_reason = "best_penalized_stability_no_feasible_candidate"
-    stability_floor = float("nan")
+    # One rule on every path: keep the candidates operationally close to the
+    # best one and take the finest. A clustering tool should not choose a
+    # trivial coarse partition merely because its ARI is a few thousandths
+    # higher. ``min_stability`` is deliberately not a selection gate: seed-pair
+    # ARIs carry a few hundredths of noise, so gating on an absolute floor made
+    # identical runs jump between the finest and the coarsest resolution. The
+    # floor is reported instead, so unstable MetaDomains are visible.
     if feasible_candidates:
-        best_feasible_stability = max(
-            item["stability_ari"] for item in feasible_candidates
+        selected = _finest_near_best(
+            feasible_candidates, "stability_ari", stability_tolerance
         )
-        stability_floor = max(
-            min_stability,
-            best_feasible_stability - stability_tolerance,
-        )
-        stable_fine_candidates = [
-            item
-            for item in feasible_candidates
-            if item["stability_ari"] >= stability_floor
-        ]
-        if stable_fine_candidates:
-            # A clustering tool should not systematically choose a trivial
-            # coarse partition merely because its ARI is a few thousandths
-            # higher. Among candidates operationally close to the best stable
-            # solution, retain the one with the most reproducible structure.
-            selected = max(
-                stable_fine_candidates,
-                key=lambda item: (
-                    item["n_clusters"],
-                    item["stability_ari"],
-                    item["resolution"],
-                ),
-            )
-            selected_reason = "finest_within_stability_tolerance"
-        else:
-            selected = max(
-                feasible_candidates,
-                key=lambda item: (
-                    item["selection_score"],
-                    item["stability_ari"],
-                ),
-            )
-            selected_reason = "best_feasible_below_stability_floor"
+        selected_reason = "finest_within_stability_tolerance"
     else:
-        selected = max(
-            candidates,
-            key=lambda item: (
-                item["selection_score"],
-                item["stability_ari"],
-                item["resolution"],
-            ),
+        selected = _finest_near_best(
+            candidates, "selection_score", stability_tolerance
+        )
+        selected_reason = "finest_near_best_penalized_no_feasible_candidate"
+    stability_floor = float(min_stability)
+    stability_floor_met = bool(
+        feasible_candidates and selected["stability_ari"] >= min_stability
+    )
+    if not stability_floor_met:
+        logging.getLogger("cellscope").warning(
+            "Consensus Leiden: selected resolution %.3g has cross-seed "
+            "ARI %.3f below module5.consensus_min_stability=%.2f (%s); "
+            "MetaDomain membership is not reproducible across seeds.",
+            selected["resolution"],
+            selected["stability_ari"],
+            min_stability,
+            selected_reason,
         )
     selected_resolution = float(selected["resolution"])
     selected_runs = runs_by_resolution[selected_resolution]
@@ -378,6 +379,7 @@ def run_stability_consensus_leiden(
         "method": "stability_consensus_leiden",
         "selected_resolution": selected_resolution,
         "selection_reason": selected_reason,
+        "stability_floor_met": bool(stability_floor_met),
         "minimum_stability": float(min_stability),
         "stability_tolerance": float(stability_tolerance),
         "selection_stability_floor": float(stability_floor),

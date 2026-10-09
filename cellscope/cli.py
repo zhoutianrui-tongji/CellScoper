@@ -586,18 +586,20 @@ def main(spatial, cell_boundaries, nucleus_boundaries, out_dir, gold_data, no_re
     meta_info = []
     if _ad and adata1_path and os.path.exists(adata1_path):
         try:
-            _a1 = _ad.read_h5ad(adata1_path)
+            _a1 = _ad.read_h5ad(adata1_path, backed="r")
             n_metaspots = _a1.n_obs
             n_genes = _a1.n_vars
             n_domains = int(_a1.obs['cell_cluster'].nunique()) if 'cell_cluster' in _a1.obs.columns else None
+            _a1.file.close()
             meta_info.append(f"- adata1: {adata1_path} (metaspots={n_metaspots}, genes={n_genes}{', meta_domains='+str(n_domains) if n_domains is not None else ''})")
         except Exception:
             meta_info.append(f"- adata1: {adata1_path}")
     if _ad and adata2_path and os.path.exists(adata2_path):
         try:
-            _a2 = _ad.read_h5ad(adata2_path)
+            _a2 = _ad.read_h5ad(adata2_path, backed="r")
             n_clusters = _a2.n_obs
             genes2 = _a2.n_vars
+            _a2.file.close()
             meta_info.append(f"- adata2: {adata2_path} (clusters={n_clusters}, genes={genes2})")
         except Exception:
             meta_info.append(f"- adata2: {adata2_path}")

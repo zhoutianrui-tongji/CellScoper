@@ -7113,10 +7113,9 @@ def build_anndata(spatial_df: pd.DataFrame,
     if out_dir is None:
         out_dir = os.getcwd()
     state_prev = _load_state(out_dir) or {}
-    try:
-        cfg = load_params_yaml()
-    except Exception:
-        cfg = {}
+    # Fingerprints decide which checkpoints may be reused, so an unreadable
+    # configuration must stop the run instead of fingerprinting an empty one.
+    cfg = load_params_yaml()
     cur_mod_fps = fingerprint_modules_set(
         cfg,
         context=fingerprint_context,
@@ -7180,26 +7179,24 @@ def build_anndata(spatial_df: pd.DataFrame,
     sampled_cell_ids = pd.unique(spatial_df['cell_id'])
     # Read Module 1 geometry options
     _m1_include_dir = True
-    _m1_use_input_nucleus_flags = True
+    # Fallbacks match the packaged params.yaml. Invalid values raise: silently
+    # reverting to defaults here could switch nuclear membership back to the
+    # input truth column.
+    _m1_use_input_nucleus_flags = False
     _m1_winsor = (1, 99)
     _m1_boundary_distance = "vertex"
-    try:
-        _cfg = load_params_yaml()
-        _m1 = _cfg.get('module1', {}) if _cfg else {}
-        _m1_boundary_distance = str(
-            _m1.get('boundary_distance', _m1_boundary_distance)
-        )
-        _m1_include_dir = bool(_m1.get('include_directional', _m1_include_dir))
-        _m1_use_input_nucleus_flags = bool(
-            _m1.get(
-                'use_input_nucleus_flags',
-                _m1_use_input_nucleus_flags,
-            )
-        )
-        wl = _m1.get('winsor_perc_low', _m1_winsor[0]); wh = _m1.get('winsor_perc_high', _m1_winsor[1])
-        _m1_winsor = (int(wl), int(wh))
-    except Exception:
-        pass
+    _m1 = (cfg or {}).get('module1', {}) or {}
+    _m1_boundary_distance = str(
+        _m1.get('boundary_distance', _m1_boundary_distance)
+    )
+    _m1_include_dir = bool(_m1.get('include_directional', _m1_include_dir))
+    _m1_use_input_nucleus_flags = bool(
+        _m1.get('use_input_nucleus_flags', _m1_use_input_nucleus_flags)
+    )
+    _m1_winsor = (
+        int(_m1.get('winsor_perc_low', _m1_winsor[0])),
+        int(_m1.get('winsor_perc_high', _m1_winsor[1])),
+    )
     # Module 1: geometry features (resume if unchanged and cache exists)
     point_df = None
     _m1_recomputed = False
@@ -12171,7 +12168,7 @@ def _run_pipeline_impl(
                 nucleus_df,
                 show_internal_progress=show_internal_progress,
                 use_input_nucleus_flags=bool(
-                    module1_cfg.get("use_input_nucleus_flags", True)
+                    module1_cfg.get("use_input_nucleus_flags", False)
                 ),
             )
             if save_intermediate and not lite_intermediate:
