@@ -206,7 +206,37 @@ def heldout_enrichment(
         out[fine]["heldout_marker_genes"] = float(
             (heldout["reference_class"] == fine).sum()
         )
+
+    # Positive control: do held-out nuclear-class genes sit in nuclear-labelled
+    # regions more than held-out cytoplasmic-class genes? This checks that the
+    # reference carries spatial signal in this dataset at all.
+    classed = np.isin(gene_class, ALL_LABELS)
+    out["broad_control_nuclear"] = _mh_odds_ratio(
+        cell_codes[classed],
+        len(cells),
+        np.isin(gene_class, NUCLEAR_LABELS)[classed],
+        np.isin(labels, NUCLEAR_LABELS)[classed],
+        n_boot,
+        seed,
+    )
     return out
+
+
+def insample_enrichment(
+    final: pd.DataFrame,
+    reference: pd.DataFrame,
+    heldout: pd.DataFrame,
+    label_col: str,
+    n_boot: int = 1000,
+    seed: int = 0,
+) -> Dict[str, Dict[str, float]]:
+    """Same statistic on genes the annotation DID see (circular upper bound)."""
+    seen = reference.loc[
+        ~reference["gene"].str.upper().isin(set(heldout["gene"].str.upper()))
+    ]
+    result = heldout_enrichment(final, seen, label_col, n_boot=n_boot, seed=seed)
+    result.pop("broad_control_nuclear", None)
+    return result
 
 
 def evaluate_run(
@@ -262,6 +292,13 @@ def evaluate_run(
         result["heldout_enrichment"] = heldout_enrichment(
             final, heldout, label_col, n_boot=n_boot
         )
+        reference_path = os.path.join(
+            os.path.dirname(os.path.abspath(heldout_path)), "reference_classes.csv"
+        )
+        if os.path.isfile(reference_path):
+            result["insample_enrichment"] = insample_enrichment(
+                final, pd.read_csv(reference_path), heldout, label_col, n_boot=n_boot
+            )
     return result
 
 
