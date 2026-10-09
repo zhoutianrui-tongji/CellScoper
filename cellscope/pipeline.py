@@ -1099,6 +1099,28 @@ def _stretch_signed_geometry(values: np.ndarray, cell_size: int) -> np.ndarray:
     return x.astype(np.float32, copy=False)
 
 
+def _point_to_ring_distance(
+    points: np.ndarray,
+    ring: np.ndarray,
+    chunk_size: int = 20000,
+) -> np.ndarray:
+    """Exact distance from each point to the edges of a closed polygon ring."""
+    pts = np.asarray(points, dtype=np.float64)
+    start = np.asarray(ring, dtype=np.float64)
+    end = np.roll(start, -1, axis=0)
+    edge = end - start
+    edge_sq = np.maximum(np.einsum("ij,ij->i", edge, edge), 1e-24)
+    out = np.empty(pts.shape[0], dtype=np.float64)
+    for lo in range(0, pts.shape[0], chunk_size):
+        rel = pts[lo:lo + chunk_size, None, :] - start[None, :, :]
+        t = np.clip(np.einsum("nmj,mj->nm", rel, edge) / edge_sq, 0.0, 1.0)
+        gap = rel - t[:, :, None] * edge[None, :, :]
+        out[lo:lo + chunk_size] = np.sqrt(
+            np.einsum("nmj,nmj->nm", gap, gap).min(axis=1)
+        )
+    return out
+
+
 def build_point_geometry_v2(
     transcripts_df: pd.DataFrame,
     nucleus_boundaries_df: pd.DataFrame,
@@ -1108,8 +1130,13 @@ def build_point_geometry_v2(
     use_input_nucleus_flags: bool = True,
     winsor_perc=(1, 99),
     show_internal_progress: bool = False,
+    boundary_distance: str = "vertex",
 ) -> pd.DataFrame:
     DTYPE = np.float32
+    boundary_distance = str(boundary_distance or "vertex").strip().lower()
+    if boundary_distance not in {"vertex", "edge"}:
+        raise ValueError("module1.boundary_distance must be 'vertex' or 'edge'")
+    use_edge_distance = boundary_distance == "edge"
 
     def _group_chunks(df: pd.DataFrame, chunk_size: int):
         buf = []
@@ -1152,8 +1179,8 @@ def build_point_geometry_v2(
                 parts.append(pd.Series(d[:, 0].astype(DTYPE), index=g.index))
         return pd.concat(parts)
 
-    def _build_nucleus_paths(nucleus_df: pd.DataFrame, cells) -> dict:
-        """Build valid nucleus polygons from boundary-point tables.
+    def _build_ordered_polygons(boundary_df: pd.DataFrame, cells, desc: str) -> dict:
+        """Build valid ordered polygons from boundary-point tables.
 
         Some spatial formats store boundary pixels/vertices without contour
         ordering. ``matplotlib.path.Path`` assumes ordered polygon vertices;
@@ -1166,12 +1193,12 @@ def build_point_geometry_v2(
         from scipy.spatial import ConvexHull
         from scipy.spatial import QhullError
 
-        paths = {}
-        sub = nucleus_df[nucleus_df['cell_id'].isin(cells)]
+        polygons = {}
+        sub = boundary_df[boundary_df['cell_id'].isin(cells)]
         it = sub.groupby('cell_id', sort=False)
         iterator = _progress_iter(
             it,
-            desc='Build nucleus Path',
+            desc=desc,
             total=it.ngroups,
             show=show_internal_progress,
         )
@@ -1190,7 +1217,7 @@ def build_point_geometry_v2(
                 pts = pts[np.sort(first_idx)]
 
             if len(pts) < 3:
-                paths[cid] = None
+                polygons[cid] = None
                 continue
 
             try:
@@ -1244,16 +1271,28 @@ def build_point_geometry_v2(
                     )
                     polygon_pts = pts[np.argsort(angle)]
 
-            paths[cid] = (
-                # With ``closed=True`` Matplotlib treats the last vertex as a
-                # CLOSEPOLY placeholder. Repeat the first point explicitly so
-                # the final real vertex is not discarded.
-                Path(np.vstack([polygon_pts, polygon_pts[:1]]), closed=True)
-                if len(polygon_pts) >= 3
+            polygons[cid] = polygon_pts if len(polygon_pts) >= 3 else None
+
+        return polygons
+
+    def _polygon_paths(polygons: dict) -> dict:
+        return {
+            # With ``closed=True`` Matplotlib treats the last vertex as a
+            # CLOSEPOLY placeholder. Repeat the first point explicitly so
+            # the final real vertex is not discarded.
+            cid: (
+                Path(np.vstack([poly, poly[:1]]), closed=True)
+                if poly is not None
                 else None
             )
+            for cid, poly in polygons.items()
+        }
 
-        return paths
+    def _boundary_distance(q: np.ndarray, kt, polygon) -> np.ndarray:
+        if use_edge_distance and polygon is not None:
+            return _point_to_ring_distance(q, polygon).astype(DTYPE)
+        d, _ = kt.query(q, k=1, return_distance=True)
+        return d[:, 0].astype(DTYPE)
 
     # Avoid copying the full transcript table. We keep the original rows and
     # build geometry columns in chunks so Module 1 can run without doubling RAM.
@@ -1264,11 +1303,22 @@ def build_point_geometry_v2(
         use_input_nucleus_flags
         and "overlaps_nucleus" in df.columns
     )
-    nuc_paths = (
-        {}
-        if use_input_nucleus_flags
-        else _build_nucleus_paths(nucleus_boundaries_df, sampled_cells)
+    need_nuc_polygons = use_edge_distance or not use_input_nucleus_flags
+    nuc_polygons = (
+        _build_ordered_polygons(
+            nucleus_boundaries_df, sampled_cells, 'Build nucleus polygons'
+        )
+        if need_nuc_polygons
+        else {}
     )
+    cell_polygons = (
+        _build_ordered_polygons(
+            cell_boundaries_df, sampled_cells, 'Build cell polygons'
+        )
+        if use_edge_distance
+        else {}
+    )
+    nuc_paths = {} if use_input_nucleus_flags else _polygon_paths(nuc_polygons)
 
     # Process grouped rows in chunks to avoid materializing several full-size
     # temporary Series at once.
@@ -1285,16 +1335,20 @@ def build_point_geometry_v2(
                 d_cell_parts.append(pd.Series(np.nan, index=g.index))
             else:
                 q = g[['x_location', 'y_location']].to_numpy()
-                d, _ = kt.query(q, k=1, return_distance=True)
-                d_cell_parts.append(pd.Series(d[:, 0].astype(DTYPE), index=g.index))
+                d_cell_parts.append(pd.Series(
+                    _boundary_distance(q, kt, cell_polygons.get(cid)),
+                    index=g.index,
+                ))
 
             kt = nuc_kd.get(cid, None)
             if kt is None:
                 d_nuc_parts.append(pd.Series(np.nan, index=g.index))
             else:
                 q = g[['x_location', 'y_location']].to_numpy()
-                d, _ = kt.query(q, k=1, return_distance=True)
-                d_nuc_parts.append(pd.Series(d[:, 0].astype(DTYPE), index=g.index))
+                d_nuc_parts.append(pd.Series(
+                    _boundary_distance(q, kt, nuc_polygons.get(cid)),
+                    index=g.index,
+                ))
 
             if use_input_nucleus_flags:
                 input_flags = (
@@ -7128,9 +7182,13 @@ def build_anndata(spatial_df: pd.DataFrame,
     _m1_include_dir = True
     _m1_use_input_nucleus_flags = True
     _m1_winsor = (1, 99)
+    _m1_boundary_distance = "vertex"
     try:
         _cfg = load_params_yaml()
         _m1 = _cfg.get('module1', {}) if _cfg else {}
+        _m1_boundary_distance = str(
+            _m1.get('boundary_distance', _m1_boundary_distance)
+        )
         _m1_include_dir = bool(_m1.get('include_directional', _m1_include_dir))
         _m1_use_input_nucleus_flags = bool(
             _m1.get(
@@ -7169,6 +7227,7 @@ def build_anndata(spatial_df: pd.DataFrame,
                 use_input_nucleus_flags=_m1_use_input_nucleus_flags,
                 winsor_perc=_m1_winsor,
                 show_internal_progress=show_internal_progress,
+                boundary_distance=_m1_boundary_distance,
             )
             _save_dataframe(point_df, out_dir, "module1_point_features")
             _m1_recomputed = True
@@ -7183,6 +7242,7 @@ def build_anndata(spatial_df: pd.DataFrame,
             use_input_nucleus_flags=_m1_use_input_nucleus_flags,
             winsor_perc=_m1_winsor,
             show_internal_progress=show_internal_progress,
+            boundary_distance=_m1_boundary_distance,
         )
         _save_dataframe(point_df, out_dir, "module1_point_features")
         _m1_recomputed = True

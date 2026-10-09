@@ -897,7 +897,7 @@ _BUILD_STAGE_KEYS: Tuple[str, ...] = (
     # Scale-aware execution
     'execution.profile','execution.exact_max_metaspots','execution.sampled_max_metaspots','execution.memory_budget_gb','execution.scratch_dir','execution.partition_rows','execution.fail_on_backend_fallback',
     # Module 1
-    'module1.include_directional','module1.use_input_nucleus_flags','module1.winsor_perc_low','module1.winsor_perc_high',
+    'module1.include_directional','module1.use_input_nucleus_flags','module1.winsor_perc_low','module1.winsor_perc_high','module1.boundary_distance',
     # Module 2
     'module2.top_g','module2.bow_knn_k','module2.max_rows_per_cell_for_svd','module2.max_svd_rows','module2.svd_n_components','module2.bow_weight_mode','module2.use_tfidf','module2.tf_norm','module2.idf_mode','module2.parallel_chunk_cells','module2.svd_sample_cells','module2.source_from_point_df','module2.stream_local_embeddings',
     # Module 3
@@ -957,7 +957,7 @@ STAGE_PARAM_MAP: Dict[str, Tuple[str, ...]] = {
 MODULE_PARAM_MAP: Dict[str, Tuple[str, ...]] = {
     # m1..m8 correspond to pipeline internal modules inside build_anndata
     'm1': (
-        'module1.include_directional','module1.use_input_nucleus_flags','module1.winsor_perc_low','module1.winsor_perc_high',
+        'module1.include_directional','module1.use_input_nucleus_flags','module1.winsor_perc_low','module1.winsor_perc_high','module1.boundary_distance',
     ),
     'm2': (
         'module2.top_g','module2.bow_knn_k','module2.max_rows_per_cell_for_svd','module2.max_svd_rows','module2.svd_n_components','module2.bow_weight_mode','module2.use_tfidf','module2.tf_norm','module2.idf_mode','module2.parallel_chunk_cells','module2.svd_sample_cells','module2.source_from_point_df','module2.stream_local_embeddings',

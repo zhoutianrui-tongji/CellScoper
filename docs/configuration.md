@@ -262,6 +262,10 @@ A legacy configuration without `omm_policy` keeps its former behavior:
   supplied nucleus polygon. Benchmark configurations should normally use
   `false` to avoid treating a simulated truth column as a model input.
   Packaged default: `false`.
+- `boundary_distance` (`vertex|edge`): How `d_cell`/`d_nuc` are measured.
+  `vertex` (default, historical behavior) uses the nearest boundary vertex;
+  `edge` uses the exact distance to the polygon edges, which is more accurate
+  when boundary polygons have few vertices. Changing it reruns from Module 1.
 - `winsor_perc_low`/`winsor_perc_high` (int, 0–100): Winsorization percentiles. Default: `1`, `99`.
 
 ## module2 (Composition embeddings)

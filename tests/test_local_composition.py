@@ -1815,6 +1815,56 @@ class LocalCompositionTests(unittest.TestCase):
 
         self.assertEqual(result["in_nucleus"].tolist(), [True, False])
 
+    def test_point_geometry_edge_distance_uses_polygon_edges(self):
+        transcripts = pd.DataFrame(
+            {
+                "cell_id": ["cell", "cell"],
+                "x_location": [2.0, 0.5],
+                "y_location": [0.25, 2.0],
+                "feature_name": ["A", "B"],
+            }
+        )
+        nucleus = pd.DataFrame(
+            {
+                "cell_id": ["cell"] * 4,
+                "vertex_x": [1.0, 3.0, 3.0, 1.0],
+                "vertex_y": [1.0, 1.0, 3.0, 3.0],
+            }
+        )
+        cell = pd.DataFrame(
+            {
+                "cell_id": ["cell"] * 4,
+                "vertex_x": [0.0, 4.0, 4.0, 0.0],
+                "vertex_y": [0.0, 0.0, 4.0, 4.0],
+            }
+        )
+        kwargs = dict(
+            sampled_cells=["cell"],
+            include_directional=False,
+            use_input_nucleus_flags=False,
+            winsor_perc=(0, 100),
+        )
+
+        vertex = build_point_geometry_v2(
+            transcripts.copy(), nucleus, cell, **kwargs
+        )
+        edge = build_point_geometry_v2(
+            transcripts.copy(), nucleus, cell, boundary_distance="edge", **kwargs
+        )
+
+        np.testing.assert_allclose(edge["d_cell"], [0.25, 0.5], atol=1e-6)
+        np.testing.assert_allclose(edge["d_nuc"], [0.75, 0.5], atol=1e-6)
+        # Mid-edge points are farther from every vertex than from the edge.
+        self.assertTrue((vertex["d_cell"] > edge["d_cell"] + 0.5).all())
+        self.assertEqual(
+            vertex["in_nucleus"].tolist(), edge["in_nucleus"].tolist()
+        )
+        with self.assertRaises(ValueError):
+            build_point_geometry_v2(
+                transcripts.copy(), nucleus, cell,
+                boundary_distance="nearest", **kwargs
+            )
+
     def test_signed_geometry_stretch_preserves_boundary_sign(self):
         values = np.array([-4.0, -1.0, -0.1, 0.0, 0.1, 1.0, 4.0] * 3)
         stretched = _stretch_signed_geometry(values, cell_size=len(values))

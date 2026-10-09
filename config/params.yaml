@@ -110,6 +110,11 @@ module1:
   # benchmark 时必须保持 false，避免使用真值造成信息泄漏
   use_input_nucleus_flags: false
 
+  # 到细胞/细胞核边界的距离定义
+  # vertex：到最近边界顶点的距离（历史行为，默认）
+  # edge：到多边形边的精确距离；顶点稀疏时更准确
+  boundary_distance: vertex
+
   # 几何特征 winsorization 下界百分位
   winsor_perc_low: 1
 
