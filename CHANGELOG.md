@@ -6,6 +6,16 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 ### Fixed
+- Consensus Leiden resolution selection no longer flips between the finest
+  and coarsest candidate on identical inputs: near-best candidates are treated
+  as ties and `consensus_min_stability` is reported (`stability_floor_met`,
+  log warning) instead of gating the choice.
+- Module 1 and checkpoint fingerprinting no longer swallow configuration
+  errors and fall back to code defaults that differ from `params.yaml`.
+- The CLI run summary opens result `.h5ad` files in backed mode instead of
+  loading them into memory.
+- RNALocate "nuclear lamina"/"nuclear membrane" and mitochondrial
+  ribosome/matrix terms map to the correct localization classes.
 - Batched RAP-X, hybrid MetaSpot, provenance, and transcript annotation column
   writeback to avoid pandas DataFrame fragmentation and repeated
   `PerformanceWarning` messages on annotation-heavy runs.
@@ -17,6 +27,9 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 - Made malformed explicit YAML configurations fail visibly.
 
 ### Added
+- `module1.boundary_distance: edge` for exact point-to-polygon distances.
+- `annotation.reference_exclude_genes_file` and `benchmarks/evaluate_run.py`
+  for held-out marker validation of annotation labels.
 - Native CSV/Parquet input loading and bounded previews for all three tables.
 - Packaged default configuration and annotation references for wheel installs.
 - Added Cell-Aware Deep Multiplex Graph Infomax (CA-DMGI) with separate
@@ -28,6 +41,9 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
   constraints, and edge-level co-association without a dense consensus matrix.
 
 ### Changed
+- `module3.partition_by_nucleus` now defaults to `true` so a MetaSpot cannot
+  straddle the nuclear boundary (2k-cell Xenium audit: nuclear/cytoplasmic
+  accuracy 0.896 -> 0.951, equal to the polygon-only ceiling).
 - Reduced CA-DMGI full-batch cost by fusing positive/corrupted sparse
   propagation, auto-tuning CPU threads, using compact CSR indices, exposing an
   explicit CPU/CUDA selector with fail-fast CUDA validation, and skipping the
