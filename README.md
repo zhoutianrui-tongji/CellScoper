@@ -67,10 +67,17 @@ Options:
   --cell-boundaries PATH       Cell boundaries CSV/Parquet
   --nucleus-boundaries PATH    Nucleus boundaries CSV/Parquet
   --out-dir PATH               Output directory
-  --config PATH                YAML config (default: config/params.yaml)
+  --config PATH                YAML config merged over config/params.yaml
+  --gold-data PATH             Optional gold table CSV/Parquet for annotation
   --internal-progress          Show internal progress
   --no-resume                  Disable resume
+  --resume-policy [auto|minimal|force]
+                               Resume behavior (default: io.resume_policy)
+  --resume-from STAGE          Rerun from load_inputs, preprocess,
+                               build_anndata, annotate, or write_outputs
+  --dry-run-diff               Show which stage would rerun; do not execute
   --no-save-intermediate       Do not persist intermediate artifacts
+  --no-show-sample             Do not print input sample rows
   --version                    Print version
 ```
 Example:

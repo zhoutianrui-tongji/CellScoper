@@ -666,3 +666,15 @@ def test_geometry_clustering_metrics_are_explicit_oracle_diagnostics():
     assert result["transcript_weighted_purity"] == 0.75
     assert result["oracle_majority_accuracy"] == 0.75
     assert "upper bound" in result["oracle_note"]
+
+
+def test_rnalocate_location_mapping_prefers_specific_structures():
+    from cellscope.pipeline import map_loc_to_l1
+
+    assert map_loc_to_l1("Nuclear lamina") == "NUC_LEM"
+    assert map_loc_to_l1("Nuclear membrane") == "NUC_LEM"
+    assert map_loc_to_l1("Mitochondrial ribosome") == "MITO_UNSPEC"
+    assert map_loc_to_l1("Mitochondrial matrix") == "MITO_MATRIX"
+    assert map_loc_to_l1("Nuclear pore complex") == "NUC_PORE"
+    assert map_loc_to_l1("Nuclear speckle") == "NUCLEUS"
+    assert map_loc_to_l1("Ribosome") == "RIBOSOME_CYTO"

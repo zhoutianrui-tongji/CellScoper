@@ -445,6 +445,13 @@ class MetaSpotDGIPipelineTests(unittest.TestCase):
         self.assertTrue(fused["runtime"]["fused_corruption_pass"])
 
     def test_sampled_dmgi_honors_cpu_threads_and_records_timings(self):
+        import importlib.util
+
+        if not any(
+            importlib.util.find_spec(name)
+            for name in ("pyg_lib", "torch_sparse")
+        ):
+            self.skipTest("neighbor sampling requires pyg-lib or torch-sparse")
         import torch
 
         rng = np.random.default_rng(17)

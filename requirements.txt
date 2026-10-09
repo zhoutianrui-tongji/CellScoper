@@ -25,6 +25,6 @@ numba>=0.58
 # Deep learning + graph embeddings (required for Module 8 DGI)
 torch>=2.1
 torch-geometric>=2.5
-# Expression latent (optional; Module 7 tries SCVI then falls back to SVD)
-scvi-tools>=0.20
+# Expression latent is optional (Module 7 tries SCVI then falls back to SVD):
+#   pip install -e '.[scvi]'
     
