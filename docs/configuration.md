@@ -254,6 +254,13 @@ A legacy configuration without `omm_policy` keeps its former behavior:
 `omm_metaspot_apply_to_primary: false` maps to `audit`; otherwise it maps to
 `strict`. When `omm_policy` is explicitly present, it is authoritative.
 
+### Held-out reference validation
+- `annotation.reference_exclude_genes_file` (path, optional): Text file with
+  one gene symbol per line. Listed genes are removed from the APEX/RNALocate
+  (or user-supplied) reference before annotation, so their localization can
+  be used as an independent check of the resulting labels. See
+  `benchmarks/evaluate_run.py`. Default: unset.
+
 ## module1 (Geometry features)
 - `knn_k` (int): Neighborhood size for geometry context. Default: `32`.
 - `include_directional` (bool): Add directional features (sin/cos). Default: `true`.

@@ -23208,6 +23208,34 @@ def  _maybe_cluster_and_annotate(adata1: ad.AnnData, adata2: ad.AnnData, final_d
                 diagnostic=True,
             )
 
+    # Held-out validation: drop listed genes from every reference table so the
+    # annotation cannot see them. Their localization can then be scored
+    # independently against the resulting labels.
+    exclude_genes_file = strict_annotation_cfg.get("reference_exclude_genes_file")
+    if exclude_genes_file:
+        with open(str(exclude_genes_file), "r", encoding="utf-8") as handle:
+            excluded_genes = {
+                line.strip().upper() for line in handle if line.strip()
+            }
+        if "Common_Gene" in gold_aug.columns:
+            gold_genes = gold_aug["Common_Gene"].astype(str)
+        else:
+            gold_genes = pd.Series(gold_aug.index.astype(str), index=gold_aug.index)
+        keep_gold = ~gold_genes.str.upper().isin(excluded_genes).to_numpy()
+        gold_aug = gold_aug.loc[keep_gold]
+        if apex_omm_audit is not None:
+            apex_omm_audit = apex_omm_audit.loc[
+                ~apex_omm_audit["Common_Gene"].astype(str).str.upper().isin(
+                    excluded_genes
+                )
+            ].reset_index(drop=True)
+        _logging.getLogger("cellscope").info(
+            "Reference hold-out: excluded %d of %d reference genes (%d listed)",
+            int((~keep_gold).sum()),
+            int(keep_gold.size),
+            len(excluded_genes),
+        )
+
     # Optional manual markers. Disabled by default because marker provenance and
     # compartment specificity must be curated explicitly.
     try:
