@@ -12171,6 +12171,17 @@ def _run_pipeline_impl(
                     module1_cfg.get("use_input_nucleus_flags", False)
                 ),
             )
+            if bool(module1_cfg.get("remove_foreign_transcripts", False)):
+                from .spillover import relative_type_expression
+
+                keep = relative_type_expression(spatial_df) > float(
+                    module1_cfg.get("foreign_max_relative_expression", 0.2)
+                )
+                logger.info(
+                    "Removed %d of %d transcripts (%.1f%%) whose gene is foreign to the cell's type",
+                    int((~keep).sum()), len(keep), 100.0 * float((~keep).mean()),
+                )
+                spatial_df = spatial_df[keep].copy()
             if save_intermediate and not lite_intermediate:
                 _save_dataframe(spatial_df, out_dir, "preprocess_spatial")
                 _save_dataframe(cell_df, out_dir, "preprocess_cell_boundaries")

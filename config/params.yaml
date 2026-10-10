@@ -110,6 +110,13 @@ module1:
   # benchmark 时必须保持 false，避免使用真值造成信息泄漏
   use_input_nucleus_flags: false
 
+  # 是否在分析前去除"外来转录本"（分割不准时混入的相邻细胞转录本）
+  # 做法：先把细胞粗分成若干类型；某基因在本细胞类型中的表达量
+  # 不超过表达最高类型的 foreign_max_relative_expression 时，视为外来并去除
+  # 组织样本建议开启；稀疏铺开的培养细胞不需要
+  remove_foreign_transcripts: false
+  foreign_max_relative_expression: 0.2
+
   # 到细胞/细胞核边界的距离定义
   # vertex：到最近边界顶点的距离（历史行为，默认）
   # edge：到多边形边的精确距离；顶点稀疏时更准确

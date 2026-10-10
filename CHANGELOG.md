@@ -27,6 +27,9 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 - Made malformed explicit YAML configurations fail visibly.
 
 ### Added
+- `module1.remove_foreign_transcripts` (off by default) drops transcripts whose
+  gene is foreign to the cell's type, i.e. likely spillover from a neighbouring
+  cell, before MetaSpots are built.
 - `annotation.method: evidence`: an alternative annotation with ten
   parameters. Units are scored against a within-cell mixing expectation,
   tested against a within-cell permutation null, and each structure is

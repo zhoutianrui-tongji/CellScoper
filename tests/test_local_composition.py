@@ -3583,3 +3583,21 @@ class LocalCompositionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_relative_type_expression_flags_genes_of_the_other_cell_type():
+    from cellscope.spillover import relative_type_expression
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for cell in range(40):
+        own, other = ("A", "B") if cell < 20 else ("B", "A")
+        for prefix, n in ((own, 95), (other, 5)):
+            rows += [(f"c{cell}", f"{prefix}{g}") for g in rng.integers(0, 5, n)]
+    frame = pd.DataFrame(rows, columns=["cell_id", "feature_name"])
+    relative = relative_type_expression(frame, n_types=2)
+    is_own = frame["feature_name"].str[0] == np.where(
+        frame["cell_id"].str[1:].astype(int) < 20, "A", "B"
+    )
+    assert (relative[is_own] > 0.9).all()
+    assert (relative[~is_own] < 0.2).all()

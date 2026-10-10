@@ -306,6 +306,13 @@ as `evidence_annotation_report.json`.
   `vertex` (default, historical behavior) uses the nearest boundary vertex;
   `edge` uses the exact distance to the polygon edges, which is more accurate
   when boundary polygons have few vertices. Changing it reruns from Module 1.
+- `remove_foreign_transcripts` (bool): Drop transcripts that probably belong to
+  a neighbouring cell before any analysis. Cells are grouped into coarse types;
+  a transcript is dropped when its gene is expressed in the cell's type at no
+  more than `foreign_max_relative_expression` (default `0.2`) of the level in
+  the type that expresses it most. Recommended for tissue sections, where
+  mis-segmented neighbour transcripts form patches that look like subcellular
+  structure. Default: `false`. Changing it reruns from preprocessing.
 - `winsor_perc_low`/`winsor_perc_high` (int, 0–100): Winsorization percentiles. Default: `1`, `99`.
 
 ## module2 (Composition embeddings)
