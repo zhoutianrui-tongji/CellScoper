@@ -249,6 +249,7 @@ def evaluate_run(
         "cell_id", "feature_name", "overlaps_nucleus", "in_nucleus",
         "metaspot", "meta-domain", label_col, "subcellular_annotation_domain",
     ]
+    columns = list(dict.fromkeys(columns))
     final = _final_table(run_dir, columns)
     labels = final[label_col].astype(str)
     result: Dict[str, object] = {
