@@ -254,6 +254,39 @@ A legacy configuration without `omm_policy` keeps its former behavior:
 `omm_metaspot_apply_to_primary: false` maps to `audit`; otherwise it maps to
 `strict`. When `omm_policy` is explicitly present, it is authoritative.
 
+### Evidence annotation (`annotation.method: evidence`)
+An alternative to RAP-X with a handful of parameters and a built-in check of
+its own labels. For each MetaSpot it compares observed marker transcripts with
+what the owning cell's RNA mixture predicts, tests the excess against copies
+of the data with gene identities shuffled within cells, and then validates each structure by holding marker
+genes out (every gene exactly once) and asking whether they land in the
+labelled regions: the typical held-out marker gene must be more enriched there
+than the typical other gene. Only structures that pass in the current dataset,
+after adjusting for all structure/level combinations, are written to
+`subcellular_annotation`. Structures passing only without that adjustment are
+added in `subcellular_annotation_exploratory`. Every structure keeps its
+`subcellular_score__*` / `subcellular_q__*` columns. The full result is saved
+as `evidence_annotation_report.json`.
+
+- `evidence_score` (`marker|propagated`): count reference markers only, or
+  weight every gene by its within-cell co-localization with them. Default:
+  `propagated`.
+- `evidence_unit` (`auto|metaspot|metadomain`): unit of evidence. `auto` picks,
+  per structure, the level with the stronger held-out enrichment.
+- `evidence_fdr` (float): BH threshold for calling a unit. Raising it trades
+  held-out enrichment for coverage; the report states both. Default: `0.05`.
+- `evidence_validation_folds`, `evidence_null_sets`, `evidence_bootstrap`
+  (int): validation folds, permutation replicates for the null, cell bootstraps.
+  Defaults: `5`, `10`, `2000`.
+- `evidence_min_gene_transcripts` (int): minimum transcripts per gene within a
+  compartment. Default: `50`.
+- `evidence_marker_margin` (float): lead a reference gene needs over its
+  second-best compartment to count as a marker. Default: `0.2`.
+- `evidence_min_resolution` (float): if the split-half Spearman correlation of
+  gene nuclear preference is below this, the data are judged not to resolve
+  subcellular localization and only Nucleus/Cytosol is reported. Default:
+  `0.3`.
+
 ### Held-out reference validation
 - `annotation.reference_exclude_genes_file` (path, optional): Text file with
   one gene symbol per line. Listed genes are removed from the APEX/RNALocate

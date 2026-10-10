@@ -27,6 +27,13 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 - Made malformed explicit YAML configurations fail visibly.
 
 ### Added
+- `annotation.method: evidence`: an alternative annotation with ten
+  parameters. Units are scored against a within-cell mixing expectation,
+  tested against a within-cell permutation null, and each structure is
+  validated on held-out marker genes; only structures supported in the current
+  dataset enter `subcellular_annotation`. A resolution gate reports
+  Nucleus/Cytosol only when gene positions carry no reproducible signal.
+  RAP-X remains the default.
 - `module1.boundary_distance: edge` for exact point-to-polygon distances.
 - `annotation.reference_exclude_genes_file` and `benchmarks/evaluate_run.py`
   for held-out marker validation of annotation labels.

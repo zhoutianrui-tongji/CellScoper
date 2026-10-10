@@ -660,8 +660,43 @@ annotation:
   # 开启亚细胞注释
   enable: true
 
-  # 使用 RAP-X 注释方法
+  # 注释方法：
+  # rapx：原有 RAP-X + MetaSpot 细化流程（下方大部分参数只对它生效）
+  # evidence：基于证据的注释。按细胞内混合期望给每个单位打分，用等大小
+  #           细胞内置换做零分布，并内置留出标志基因检验；只有在本数据上
+  #           通过检验的结构才写入 subcellular_annotation。
   method: rapx
+
+  # ----------------------------------------------------------
+  # evidence 方法的全部参数
+  # ----------------------------------------------------------
+  # marker：只统计参考标志基因；propagated：按与标志基因的细胞内共定位
+  # 给所有基因加权，证据来自单位内的全部转录本。
+  evidence_score: propagated
+
+  # auto：每个结构在 MetaSpot 与 MetaDomain 两个层级中取留出检验更强者。
+  evidence_unit: auto
+
+  # 判定阈值（BH FDR，零分布为细胞内打乱基因标签的置换）。这是唯一需要按用途调整的参数：
+  # 调大可提高覆盖率，留出富集会相应下降，报告中会给出实际数值。
+  evidence_fdr: 0.05
+
+  # 内置留出检验的折数、置换零分布的重复次数、自助抽样次数。
+  evidence_validation_folds: 5
+  evidence_null_sets: 10
+  evidence_bootstrap: 2000
+
+  # 基因在该区室内至少有这么多转录本才参与打分。
+  evidence_min_gene_transcripts: 50
+
+  # 参考基因归入某一结构所需的领先幅度（0-1 归一化得分）。
+  evidence_marker_margin: 0.2
+
+  # 数据门槛：基因核内偏好在两半细胞间的 Spearman 相关低于该值时，判定数据
+  # 不具备亚细胞分辨率，只输出 Nucleus/Cytosol。
+  evidence_min_resolution: 0.3
+
+  evidence_seed: 0
 
   # 最终细粒度注释单位是 MetaSpot
   unit: metaspot

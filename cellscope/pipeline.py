@@ -12276,10 +12276,10 @@ def _run_pipeline_impl(
 
     # ==== Stage 4: Annotation (optional/configurable) ====
     ann_method = (annotation_method or "rapx").lower()
-    if bool(enable_annotation) and ann_method not in {"rapx", "rap-x", "none"}:
+    if bool(enable_annotation) and ann_method not in {"rapx", "rap-x", "evidence", "none"}:
         raise ValueError(
-            f"Unsupported annotation method {ann_method!r}; expected 'rapx' "
-            "or explicitly disable annotation with method='none'."
+            f"Unsupported annotation method {ann_method!r}; expected 'rapx', "
+            "'evidence', or explicitly disable annotation with method='none'."
         )
     if bool(enable_annotation) and ann_method != "none" and adata2 is None:
         raise RuntimeError(
@@ -12298,7 +12298,7 @@ def _run_pipeline_impl(
     if run_annotation and _should_run("annotate", annotation_cache_ready):
         if resume_enabled and stage_to_idx["annotate"] < start_idx and not annotation_cache_ready:
             logger.info("Resume requested skip for annotate but checkpoint missing → re-running")
-        if progress_callback: progress_callback("Annotation (RAP-X)")
+        if progress_callback: progress_callback(f"Annotation ({ann_method})")
         try:
             try:
                 _cfg = load_params_yaml()
@@ -12307,15 +12307,20 @@ def _run_pipeline_impl(
             except Exception:
                 rapx_two_stage = False
                 rapx_spatial_channel = False
-            adata1, adata2, final_data = _maybe_cluster_and_annotate(
-                adata1, adata2, final_data,
-                show_internal_progress=show_internal_progress,
-                out_dir=out_dir,
-                annotation_method=ann_method,
-                rapx_two_stage=rapx_two_stage,
-                rapx_spatial_channel=rapx_spatial_channel,
-                gold_data=gold_data,
-            )
+            if ann_method == "evidence":
+                adata1, final_data = _annotate_with_evidence(
+                    adata1, final_data, gold_data, out_dir
+                )
+            else:
+                adata1, adata2, final_data = _maybe_cluster_and_annotate(
+                    adata1, adata2, final_data,
+                    show_internal_progress=show_internal_progress,
+                    out_dir=out_dir,
+                    annotation_method=ann_method,
+                    rapx_two_stage=rapx_two_stage,
+                    rapx_spatial_channel=rapx_spatial_channel,
+                    gold_data=gold_data,
+                )
             required_annotation_columns = {
                 "subcellular_annotation",
                 "subcellular_annotation_domain",
@@ -18060,6 +18065,164 @@ def _load_default_gold_tables(
     if return_omm_audit:
         return gold_apex, rna_locate, omm_audit
     return gold_apex, rna_locate
+
+
+def _load_reference_scores(
+    gold_data: Optional[Union[str, pd.DataFrame]],
+    annotation_cfg: Mapping[str, Any],
+) -> pd.DataFrame:
+    """Gene x compartment reference scores, indexed by upper-case symbol.
+
+    Uses the same sources and hold-out option as RAP-X: a user table when
+    given, otherwise bundled APEX-seq merged with RNALocate.
+    """
+    if gold_data is not None:
+        table = (
+            gold_data.copy()
+            if isinstance(gold_data, pd.DataFrame)
+            else (
+                pd.read_parquet(gold_data)
+                if str(gold_data).lower().endswith((".parquet", ".pq"))
+                else pd.read_csv(gold_data)
+            )
+        )
+        if "Common_Gene" not in table.columns:
+            table = table.reset_index()
+        if "Common_Gene" not in table.columns:
+            raise ValueError("gold_data must contain a 'Common_Gene' column")
+        reference = merge_gold(table, table.iloc[0:0], fuse="max")
+        # Same per-gene 0-1 scaling RAP-X applies to a user table.
+        reference = reference.sub(reference.min(axis=1), axis=0)
+        reference = reference.div(reference.max(axis=1).replace(0, 1.0), axis=0)
+    else:
+        gold_apex, rna_locate = _load_default_gold_tables(
+            apex_omm_specificity_filter=bool(
+                annotation_cfg.get("apex_omm_specificity_filter", True)
+            ),
+            apex_omm_min_log2fc=float(annotation_cfg.get("apex_omm_min_log2fc", 0.75)),
+            apex_omm_min_delta=float(annotation_cfg.get("apex_omm_min_delta", 0.50)),
+        )
+        species = annotation_cfg.get(
+            "rnalocate_species", ("Homo sapiens", "Mus musculus")
+        )
+        if isinstance(species, str):
+            species = tuple(v.strip() for v in species.split(",") if v.strip())
+        from_rnalocate = _configure_rnalocate_augmentation(
+            project_l1_to_seven(
+                build_gold_from_rnalocate_l1(
+                    rna_locate,
+                    species=tuple(species) if species is not None else None,
+                    agg_mode="prob_or",
+                    score_floor=0.6,
+                    use_pubmed_weight=True,
+                ),
+                mode="strict",
+                mito_non_omm=None,
+            ),
+            augment_er=bool(annotation_cfg.get("rnalocate_augment_er", False)),
+        )
+        reference = merge_gold(gold_apex, from_rnalocate, fuse="max")
+    reference.index = reference.index.astype(str).str.upper()
+    reference = reference.loc[~reference.index.duplicated()]
+    exclude_file = annotation_cfg.get("reference_exclude_genes_file")
+    if exclude_file:
+        with open(str(exclude_file), "r", encoding="utf-8") as handle:
+            excluded = {line.strip().upper() for line in handle if line.strip()}
+        kept = ~reference.index.isin(excluded)
+        _logging.getLogger("cellscope").info(
+            "Reference hold-out: excluded %d of %d reference genes (%d listed)",
+            int((~kept).sum()),
+            int(kept.size),
+            len(excluded),
+        )
+        reference = reference.loc[kept]
+    return reference
+
+
+def _annotate_with_evidence(
+    adata1: ad.AnnData,
+    final_df: pd.DataFrame,
+    gold_data: Optional[Union[str, pd.DataFrame]],
+    out_dir: Optional[str],
+) -> Tuple[ad.AnnData, pd.DataFrame]:
+    """Run the evidence annotation and write its columns and report."""
+    import json
+
+    from .evidence_annotation import run_evidence_annotation
+
+    log = _logging.getLogger("cellscope")
+    annotation_cfg = resolve_annotation_configuration(load_params_yaml() or {})
+    reference = _load_reference_scores(gold_data, annotation_cfg)
+    table, report = run_evidence_annotation(final_df, reference, annotation_cfg)
+    table = table.set_index("metaspot")
+
+    # MetaDomain summary: the most common primary label of its MetaSpots,
+    # separately on each side of the nuclear boundary.
+    spot_domain = (
+        final_df.drop_duplicates("metaspot")
+        .set_index("metaspot")["meta-domain"]
+        .astype(str)
+        .reindex(table.index)
+    )
+    domain_key = spot_domain + "|" + table["subcellular_broad_compartment"].astype(str)
+    table["subcellular_annotation_domain"] = (
+        table["subcellular_annotation"]
+        .groupby(domain_key.to_numpy())
+        .transform(lambda labels: labels.value_counts().index[0])
+    )
+
+    rows = table.index.get_indexer(final_df["metaspot"])
+    final_df = _replace_frame_columns(
+        final_df, {name: table[name].to_numpy()[rows] for name in table.columns}
+    )
+    obs_rows = table.index.get_indexer(adata1.obs_names.astype(str))
+    if (obs_rows < 0).any():
+        raise RuntimeError(
+            "Evidence annotation: adata1 MetaSpots are missing from final_data"
+        )
+    _replace_obs_columns(
+        adata1, {name: table[name].to_numpy()[obs_rows] for name in table.columns}
+    )
+
+    def _json_safe(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {str(k): _json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_json_safe(v) for v in value]
+        if isinstance(value, (float, np.floating)):
+            return float(value) if np.isfinite(value) else None
+        if isinstance(value, (np.integer, np.bool_)):
+            return value.item()
+        return value
+
+    report = _json_safe(report)
+    adata1.uns["evidence_annotation"] = json.dumps(report)
+    if out_dir:
+        atomic_write_json(
+            os.path.join(out_dir, "evidence_annotation_report.json"), report
+        )
+    resolution = report["resolution"]
+    log.info(
+        "Evidence annotation | resolution_spearman=%s | supported=%s",
+        resolution.get("split_half_spearman"),
+        report["supported_structures"] or "none",
+    )
+    for name, entry in report["structures"].items():
+        level = entry.get("level")
+        stats = (entry.get("levels") or {}).get(level, {})
+        log.info(
+            "  %-12s supported=%s level=%s held-out marker enrichment=%s "
+            "(95%% CI %s-%s) units=%s markers=%s",
+            name,
+            entry.get("supported"),
+            level,
+            stats.get("marker_enrichment"),
+            stats.get("ci_low"),
+            stats.get("ci_high"),
+            entry.get("units_called"),
+            entry.get("marker_genes_used"),
+        )
+    return adata1, final_df
 
 
 def _configure_rnalocate_augmentation(
