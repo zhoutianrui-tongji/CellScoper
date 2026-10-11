@@ -562,6 +562,31 @@ def _choose_labels(
     return labels
 
 
+def _seat_structures(scores: np.ndarray, cells: np.ndarray) -> np.ndarray:
+    """Give every structure its best-scoring unit in every cell.
+
+    ``scores`` is units x structures. Returns the structure index per unit, or
+    -1. Cells with too few units to seat every structure and keep one unit for
+    the broad label are left unseated.
+    """
+    seats = np.full(len(scores), -1)
+    scored = np.flatnonzero(np.isfinite(scores).all(axis=0))  # structures without markers have no score
+    order = np.argsort(cells, kind="stable")
+    bounds = np.flatnonzero(np.diff(cells[order])) + 1
+    for rows in np.split(order, bounds):
+        if len(rows) <= len(scored):
+            continue
+        local = scores[np.ix_(rows, scored)]
+        local = (local - local.mean(axis=0)) / (local.std(axis=0) + 1e-9)
+        free = np.ones(len(rows), dtype=bool)
+        # The structure with the clearest best unit chooses first.
+        for j in np.argsort(-local.max(axis=0)):
+            pick = np.flatnonzero(free)[np.argmax(local[free, j])]
+            seats[rows[pick]] = scored[j]
+            free[pick] = False
+    return seats
+
+
 def run_evidence_annotation(
     transcripts: pd.DataFrame,
     reference: pd.DataFrame,
@@ -571,8 +596,9 @@ def run_evidence_annotation(
 
     ``transcripts`` needs ``cell_id``, ``feature_name``, ``metaspot``,
     ``meta-domain`` and ``in_nucleus``. Returns one row per MetaSpot with the
-    primary and exploratory labels, per-structure scores and q-values, plus a
-    JSON-serializable report.
+    primary, exploratory and complete labels, per-structure scores and q-values,
+    plus a JSON-serializable report. The complete labels place all structures in
+    every cell and are not gated by validation.
     """
     options = dict(DEFAULTS)
     options.update({k: v for k, v in (config or {}).items() if k in DEFAULTS and v is not None})
@@ -624,6 +650,7 @@ def run_evidence_annotation(
     )
     primary = result["subcellular_broad_compartment"].to_numpy(dtype=object).copy()
     exploratory = primary.copy()
+    complete = primary.copy()
     for name in FINE_STRUCTURES:
         result[f"subcellular_score__{name}"] = np.nan
         result[f"subcellular_q__{name}"] = np.nan
@@ -661,11 +688,18 @@ def run_evidence_annotation(
             fdr = float(options["evidence_fdr"])
             primary[rows] = _choose_labels(table, structures, supported, broad, fdr)
             exploratory[rows] = _choose_labels(table, structures, suggestive, broad, fdr)
+            # Complete view: every cell shows every structure at its most likely
+            # unit, whether or not the structure passed validation.
+            scores = table[[f"score__{name}" for name in structures]].to_numpy(dtype=float)
+            seats = _seat_structures(scores, local_cells)
+            seated = np.where(seats >= 0, np.asarray(structures, dtype=object)[seats], primary[rows])
+            complete[rows] = seated
             for name in structures:
                 result.loc[rows, f"subcellular_score__{name}"] = table[f"score__{name}"].to_numpy()
                 result.loc[rows, f"subcellular_q__{name}"] = table[f"q__{name}"].to_numpy()
     result["subcellular_annotation"] = primary
     result["subcellular_annotation_exploratory"] = exploratory
+    result["subcellular_annotation_complete"] = complete
     report["supported_structures"] = [
         name for name, entry in report["structures"].items() if entry.get("supported")
     ]

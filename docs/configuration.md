@@ -268,6 +268,13 @@ added in `subcellular_annotation_exploratory`. Every structure keeps its
 `subcellular_score__*` / `subcellular_q__*` columns. The full result is saved
 as `evidence_annotation_report.json`.
 
+`subcellular_annotation_complete` is a third view for analyses that need all
+seven structures in every cell: inside each cell, every structure is placed on
+the unit with its highest score (never across the nuclear boundary), and the
+remaining units keep their `subcellular_annotation` label. It is not gated by
+validation, so read it together with the report, which states for each
+structure whether held-out marker genes support it in this dataset.
+
 - `evidence_score` (`marker|propagated`): count reference markers only, or
   weight every gene by its within-cell co-localization with them. Default:
   `propagated`.

@@ -27,6 +27,8 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 - Made malformed explicit YAML configurations fail visibly.
 
 ### Added
+- `subcellular_annotation_complete` (evidence annotation): all seven structures
+  placed in every cell at their best-scoring unit, independent of validation.
 - `module1.remove_foreign_transcripts` (off by default) drops transcripts whose
   gene is foreign to the cell's type, i.e. likely spillover from a neighbouring
   cell, before MetaSpots are built.
