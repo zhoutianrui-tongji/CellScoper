@@ -6,6 +6,11 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 ### Changed
+- The default reference now also contains `src/extra_reference_markers.tsv`
+  (CAP-seq ER, LoRNA mitochondrion fraction for OMM, nuclear-speckle APEX-seq).
+  This adds an eighth label, `Nuclear Speckle`. Held-out enrichment of ER, OMM
+  and Nuclear Speckle improved on both test datasets.
+- A structure without any marker gene in the panel is no longer placed.
 - `module1.remove_foreign_transcripts` is on by default.
 - New column `subcellular_annotation_support` grades every final label as
   `segmentation`, `validated` or `unvalidated`.

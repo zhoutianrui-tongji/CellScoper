@@ -112,11 +112,18 @@ def test_resolution_gate_reports_broad_labels_when_positions_carry_no_signal():
 
 def test_complete_labels_show_every_structure_in_every_cell():
     frame, reference = _synthetic()
-    table, _ = run_evidence_annotation(frame, reference, FAST)
+    table, report = run_evidence_annotation(frame, reference, FAST)
     cell = frame.drop_duplicates("metaspot").set_index("metaspot")["cell_id"].reindex(table["metaspot"])
     per_cell = table.groupby(cell.to_numpy())["subcellular_annotation"].agg(set)
     units = table.groupby(cell.to_numpy()).size()
-    assert (per_cell[units >= 12].map(len) == 7).all()
+    # Every structure that has marker genes is shown in every cell; the synthetic
+    # reference has none for the nuclear structures, so those are never placed.
+    with_markers = [s for s, e in report["structures"].items() if e["marker_genes_used"]]
+    assert set(with_markers) == {"ER", "OMM"}
+    assert (per_cell[units >= 12] == {"Nucleus", "Cytosol", "ER", "OMM"}).all()
+    assert set(report["structures_without_markers"]) == {
+        "Nucleolus", "Lamina", "Nuclear Pore", "Nuclear Speckle"
+    }
     # Seating never crosses the nuclear boundary.
     nuclear = table["subcellular_broad_compartment"].to_numpy() == "Nucleus"
     assert not set(table.loc[nuclear, "subcellular_annotation"]) & {"Cytosol", "ER", "OMM"}
@@ -148,3 +155,16 @@ def test_support_column_grades_every_final_label():
     assert (support[label.isin(["Nucleus", "Cytosol"])] == "segmentation").all()
     assert (support[label.isin(report["supported_structures"])] == "validated").all()
     assert (support[label.isin(report["unsupported_structures"])] == "unvalidated").all()
+
+
+def test_bundled_extra_markers_extend_the_default_reference():
+    from cellscope.evidence_annotation import marker_sets_from_reference
+    from cellscope.pipeline import _load_reference_scores
+
+    reference = _load_reference_scores(None, {})
+    assert reference.index.is_unique
+    sets = marker_sets_from_reference(reference, 0.2)
+    assert len(sets["Nuclear Speckle"]) > 100
+    extra = pd.read_table("src/extra_reference_markers.tsv")
+    listed = set(extra.loc[extra["structure"] == "OMM", "gene"].str.upper())
+    assert listed <= set(sets["OMM"])

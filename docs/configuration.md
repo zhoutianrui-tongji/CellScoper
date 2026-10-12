@@ -64,7 +64,7 @@ Label columns:
 
 - `subcellular_annotation` is the final label. Inside each cell, every
   structure is placed on the unit with its highest score (never across the
-  nuclear boundary), so nearly every cell shows all seven structures. It is not
+  nuclear boundary), so nearly every cell shows every structure. It is not
   gated by validation.
 - `subcellular_annotation_support` grades each final label: `segmentation`
   (Nucleus/Cytosol, from the nuclear boundary), `validated` (the structure
@@ -99,6 +99,25 @@ labels are a best guess from the reference.
   gene nuclear preference is below this, the data are judged not to resolve
   subcellular localization and only Nucleus/Cytosol is reported. Default:
   `0.3`.
+
+### Reference
+Without `--gold-data`, the reference is the bundled APEX-seq atlas (Fazal et
+al. 2019) merged with RNALocate v3, plus `src/extra_reference_markers.tsv`:
+gene lists that raised held-out marker enrichment on tissue Xenium data.
+
+| Structure | Source | Genes |
+|---|---|---|
+| ER | CAP-seq ER-membrane RNAs (Wang et al. 2019, Nat Chem Biol 15:1110) | 329 |
+| OMM | LoRNA mitochondrion fraction (Villanueva et al. 2024, Nat Methods 21:60) | 236 |
+| Nuclear Speckle | APEX-seq of SRSF1/SRSF7/RNPS1 (Barutcu et al. 2022, Mol Cell 82:1035) | 289 |
+
+Nuclear speckles are an eighth label; the other sources do not contain it. The
+structures are therefore Nucleus, Nucleolus, Lamina, Nuclear Pore, Nuclear
+Speckle, Cytosol, ER and OMM. A structure with no marker gene in the panel is
+not placed and is listed under `structures_without_markers` in the report. The
+OMM lists (APEX-seq and LoRNA) are dominated by secretory-pathway genes, not
+by genes encoding mitochondrial proteins. A user-supplied `--gold-data` table
+is used as given, without the extra markers.
 
 ### Held-out reference validation
 - `annotation.reference_exclude_genes_file` (path, optional): Text file with

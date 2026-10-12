@@ -8633,9 +8633,10 @@ def _write_output_guide(
         annotation_section = f"""
 ## Subcellular annotation
 
-- `subcellular_annotation`: the final label. Inside each cell every one of the
-  seven structures is placed on its best-scoring unit, so nearly every cell
-  shows all seven. It is not gated by validation.
+- `subcellular_annotation`: the final label. Inside each cell every structure
+  (Nucleolus, Lamina, Nuclear Pore, Nuclear Speckle, ER, OMM) is placed on its
+  best-scoring unit, so nearly every cell shows all of them next to Nucleus and
+  Cytosol. It is not gated by validation.
 - `subcellular_annotation_support`: how far each final label can be trusted.
   `segmentation`: Nucleus/Cytosol, decided by the nuclear boundary.
   `validated`: the structure passed held-out marker validation in this dataset;
@@ -10653,13 +10654,13 @@ GOLD_ALIAS = {
 }
 PRETTY = {'NUCLEUS':'Nucleus','NUCLEOLUS':'Nucleolus','LAMINA':'Lamina',
           'NUCLEAR_PORE':'Nuclear Pore','CYTOSOL':'Cytosol','ER':'ER','OMM':'OMM'}
-NUCLEAR_LABELS = frozenset({'Nucleus', 'Nucleolus', 'Lamina', 'Nuclear Pore'})
+NUCLEAR_LABELS = frozenset({'Nucleus', 'Nucleolus', 'Lamina', 'Nuclear Pore', 'Nuclear Speckle'})
 CYTOPLASMIC_LABELS = frozenset(
     {'Cytosol', 'ER', 'OMM', 'ER-OMM shared'}
 )
 
 # 可视化用的顺序与颜色
-PRETTY_ORDER = ['Cytosol','ER','Lamina','Nuclear Pore','Nucleolus','Nucleus','OMM']
+PRETTY_ORDER = ['Cytosol','ER','Lamina','Nuclear Pore','Nuclear Speckle','Nucleolus','Nucleus','OMM']
 SIG_COLOR    = {
     '***': '#d62728',
     '**': '#ff7f0e',
@@ -10916,6 +10917,40 @@ def _load_default_gold_tables(
     return gold_apex, rna_locate
 
 
+def _apply_extra_reference_markers(reference: pd.DataFrame) -> pd.DataFrame:
+    """Add the bundled markers that improved held-out validation.
+
+    ``extra_reference_markers.tsv`` lists genes from CAP-seq (ER), LoRNA (OMM)
+    and nuclear-speckle APEX-seq. Each listed gene becomes an unambiguous marker
+    of its structure; nuclear speckles are a class the APEX-seq/RNALocate
+    reference does not have.
+    """
+    path = bundled_resource_path("extra_reference_markers.tsv")
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            "Bundled extra_reference_markers.tsv is missing from the "
+            "CellScoper installation"
+        )
+    extra = pd.read_table(path)
+    extra["gene"] = extra["gene"].astype(str)
+    reference = reference.copy()
+    for column in extra["structure"].unique():
+        if column not in reference.columns:
+            reference[column] = 0.0
+    known_upper = pd.Series(reference.index, index=reference.index.astype(str).str.upper())
+    known_upper = known_upper[~known_upper.index.duplicated()]
+    rows = known_upper.reindex(extra["gene"].str.upper())
+    new_genes = extra.loc[rows.isna().to_numpy(), "gene"].drop_duplicates()
+    reference = pd.concat(
+        [reference, pd.DataFrame(0.0, index=new_genes.to_numpy(), columns=reference.columns)]
+    )
+    index = np.where(rows.isna().to_numpy(), extra["gene"].to_numpy(), rows.to_numpy())
+    reference.loc[index] = 0.0
+    for column, genes in pd.Series(index).groupby(extra["structure"].to_numpy()):
+        reference.loc[genes.to_numpy(), column] = 1.0
+    return reference
+
+
 def _load_reference_scores(
     gold_data: Optional[Union[str, pd.DataFrame]],
     annotation_cfg: Mapping[str, Any],
@@ -10970,7 +11005,9 @@ def _load_reference_scores(
             ),
             augment_er=bool(annotation_cfg.get("rnalocate_augment_er", False)),
         )
-        reference = merge_gold(gold_apex, from_rnalocate, fuse="max")
+        reference = _apply_extra_reference_markers(
+            merge_gold(gold_apex, from_rnalocate, fuse="max")
+        )
     reference.index = reference.index.astype(str).str.upper()
     reference = reference.loc[~reference.index.duplicated()]
     exclude_file = annotation_cfg.get("reference_exclude_genes_file")

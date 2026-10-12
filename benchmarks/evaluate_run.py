@@ -31,11 +31,11 @@ import numpy as np
 import pandas as pd
 
 
-NUCLEAR_LABELS = ("Nucleus", "Nucleolus", "Lamina", "Nuclear Pore")
+NUCLEAR_LABELS = ("Nucleus", "Nucleolus", "Lamina", "Nuclear Pore", "Nuclear Speckle")
 CYTOPLASMIC_LABELS = ("Cytosol", "ER", "OMM")
-FINE_LABELS = ("Nucleolus", "Lamina", "Nuclear Pore", "ER", "OMM")
+FINE_LABELS = ("Nucleolus", "Lamina", "Nuclear Pore", "Nuclear Speckle", "ER", "OMM")
 ALL_LABELS = NUCLEAR_LABELS + CYTOPLASMIC_LABELS
-_GOLD_TO_LABEL = {"Nuclear_Pore": "Nuclear Pore"}
+_GOLD_TO_LABEL = {"Nuclear_Pore": "Nuclear Pore", "Nuclear_Speckle": "Nuclear Speckle"}
 
 
 def _final_table(run_dir: str, columns: Optional[List[str]] = None) -> pd.DataFrame:

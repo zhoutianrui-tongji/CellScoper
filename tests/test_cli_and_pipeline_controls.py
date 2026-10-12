@@ -275,6 +275,7 @@ def test_subcellular_publication_palette_has_one_canonical_side_assignment():
         "Nucleolus": "#6B5CA5",
         "Lamina": "#4F83B6",
         "Nuclear Pore": "#4FA7B8",
+        "Nuclear Speckle": "#3E9C7A",
         "Cytosol": "#D6A23C",
         "ER": "#E2743E",
         "OMM": "#B84A62",

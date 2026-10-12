@@ -11,6 +11,7 @@ _BUNDLED_FILES = (
 	(here / "src" / "2019_CELL_APEXSeq.tsv", "2019_CELL_APEXSeq.tsv"),
 	(here / "src" / "RNALocateV3.txt", "RNALocateV3.txt"),
 	(here / "src" / "manual_marker.csv", "manual_marker.csv"),
+	(here / "src" / "extra_reference_markers.tsv", "extra_reference_markers.tsv"),
 )
 
 

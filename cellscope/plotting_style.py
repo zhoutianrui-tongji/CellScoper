@@ -18,6 +18,7 @@ SUBCELLULAR_LABEL_ORDER: Tuple[str, ...] = (
     "Nucleolus",
     "Lamina",
     "Nuclear Pore",
+    "Nuclear Speckle",
     "Cytosol",
     "ER",
     "OMM",
@@ -30,6 +31,7 @@ SUBCELLULAR_LABEL_GROUPS: Dict[str, Tuple[str, ...]] = {
         "Nucleolus",
         "Lamina",
         "Nuclear Pore",
+        "Nuclear Speckle",
     ),
     "Cytoplasmic side": (
         "Cytosol",
@@ -46,6 +48,7 @@ SUBCELLULAR_LABEL_PALETTE: Dict[str, str] = {
     "Nucleolus": "#6B5CA5",
     "Lamina": "#4F83B6",
     "Nuclear Pore": "#4FA7B8",
+    "Nuclear Speckle": "#3E9C7A",
     "Cytosol": "#D6A23C",
     "ER": "#E2743E",
     "OMM": "#B84A62",

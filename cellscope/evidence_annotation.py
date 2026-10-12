@@ -26,12 +26,12 @@ import pandas as pd
 import scipy.sparse as sp
 
 
-NUCLEAR_STRUCTURES = ("Nucleolus", "Lamina", "Nuclear Pore")
+NUCLEAR_STRUCTURES = ("Nucleolus", "Lamina", "Nuclear Pore", "Nuclear Speckle")
 CYTOPLASMIC_STRUCTURES = ("ER", "OMM")
 FINE_STRUCTURES = NUCLEAR_STRUCTURES + CYTOPLASMIC_STRUCTURES
 BROAD_LABEL = {"nuclear": "Nucleus", "cytoplasmic": "Cytosol"}
 UNIT_LEVELS = ("metaspot", "metadomain")
-_REFERENCE_TO_LABEL = {"Nuclear_Pore": "Nuclear Pore"}
+_REFERENCE_TO_LABEL = {"Nuclear_Pore": "Nuclear Pore", "Nuclear_Speckle": "Nuclear Speckle"}
 
 DEFAULTS: Dict[str, Any] = {
     "evidence_score": "propagated",        # marker | propagated
@@ -709,6 +709,10 @@ def run_evidence_annotation(
             # Final view: every cell shows every structure at its most likely
             # unit; validated structures also take their other high-scoring units.
             scores = table[[f"score__{name}" for name in structures]].to_numpy(dtype=float)
+            # A structure with no marker gene in this panel has nothing to be placed by.
+            for j, name in enumerate(structures):
+                if not structure_report[name].get("marker_genes_used"):
+                    scores[:, j] = np.nan
             seats = _seat_structures(
                 scores, local_cells, [structures.index(s) for s in supported]
             )
@@ -717,7 +721,7 @@ def run_evidence_annotation(
             for name in structures:
                 result.loc[rows, f"subcellular_score__{name}"] = table[f"score__{name}"].to_numpy()
                 result.loc[rows, f"subcellular_q__{name}"] = table[f"q__{name}"].to_numpy()
-    # The final label shows all seven structures in every cell; the validated
+    # The final label shows every structure in every cell; the validated
     # view keeps only what held-out markers support in this dataset.
     result["subcellular_annotation"] = complete
     result["subcellular_annotation_validated"] = primary
@@ -726,7 +730,15 @@ def run_evidence_annotation(
         name for name, entry in report["structures"].items() if entry.get("supported")
     ]
     report["unsupported_structures"] = [
-        name for name in FINE_STRUCTURES if name not in report["supported_structures"]
+        name
+        for name in FINE_STRUCTURES
+        if name not in report["supported_structures"]
+        and report["structures"].get(name, {}).get("marker_genes_used")
+    ]
+    report["structures_without_markers"] = [
+        name
+        for name in FINE_STRUCTURES
+        if not report["structures"].get(name, {}).get("marker_genes_used")
     ]
     # How far each final label can be trusted, so downstream code does not have
     # to read the report: broad labels come from the nuclear segmentation, fine

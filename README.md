@@ -179,7 +179,7 @@ remaining 100k-cell validation gates.
 ## Outputs
 
 - `adata1.h5ad`: final MetaSpot-level object. Annotation columns in `obs`:
-  `subcellular_annotation` (the final label: all seven structures placed in
+  `subcellular_annotation` (the final label: every structure placed in
   every cell at their best-scoring unit, not gated by validation),
   `subcellular_annotation_support` (`segmentation`, `validated` or
   `unvalidated`: how far each final label can be trusted),
