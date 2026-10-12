@@ -33,244 +33,32 @@ _DGI_UNIT_ALIASES = {
 
 _ANNOTATION_INTERNAL_DEFAULTS: Dict[str, Any] = {
     "enable": True,
-    "method": "rapx",
-    "unit": "metadomain",
-    "decision_mode": "independent",
-    "independent_mixed_score_delta": 0.75,
-    "independent_unknown_label": "Unknown",
-    "independent_geometry_min_abs_r": 0.05,
-    "independent_domain_compartment_feasibility": True,
-    "independent_assignment_mode": "hierarchical",
-    "independent_exploratory_max_q": 0.30,
-    "independent_exploratory_min_channel_support": 2,
-    "independent_exploratory_min_score_gap": 0.50,
-    "independent_subtype_parent_margin": 0.0,
-    "independent_omm_competitor_margin": 0.0,
-    "two_stage": False,
-    "spatial_channel": True,
-    "low_conf_policy": "supported",
-    "low_conf_relaxed_z": 1.25,
-    "low_conf_relaxed_q": 0.30,
-    "marker_set_target": 600,
-    "marker_min_weight": 0.05,
-    "marker_min_margin": 0.05,
-    "gold_column_normalize": False,
-    "min_channel_support": 2,
-    "enforce_geometry_consistency": False,
-    "geometry_quantile": 0.4,
-    "geometry_channel_weight": 0.0,
-    "guard_mode": "adaptive",
-    "subtype_fdr": 0.05,
-    "min_effective_markers": 10,
-    "null_permutations": 500,
-    "null_seed": 0,
-    "single_stage_compartment_score_weight": 0.0,
-    "single_stage_compartment_score_tau": 0.2,
-    "single_stage_compartment_guard": False,
-    "single_stage_compartment_min_abs_r": 0.05,
-    "single_stage_compartment_max_score_gap": 8.5,
-    "single_stage_compartment_min_z": 1.0,
-    "single_stage_compartment_max_q": 0.35,
-    "single_stage_compartment_min_channel_support": 1,
-    "metaspot_compartment_correction": True,
-    "metaspot_pool_rep": "X_dgi_gcn_metaspot",
-    "metaspot_pool_k": 8,
-    "metaspot_dgi_consensus_weight": 0.75,
-    "metaspot_dgi_seed_min_marker_transcripts": 3,
-    "metaspot_dgi_seed_min_marker_genes": 2,
-    "metaspot_dgi_seed_min_log2_enrichment": 0.5,
-    "metaspot_dgi_min_informative_neighbors": 2,
-    "metaspot_dgi_exploratory": True,
-    "metaspot_dgi_exploratory_min_support": 0.75,
-    "metaspot_dgi_exploratory_min_margin": 0.25,
-    "metaspot_cell_coverage_rescue": False,
-    "metaspot_cell_coverage_labels": [
-        "Nucleolus",
-        "Lamina",
-        "Nuclear Pore",
-        "ER",
-    ],
-    "metaspot_cell_coverage_min_marker_transcripts": 4,
-    "metaspot_cell_coverage_min_marker_genes": 3,
-    "metaspot_cell_coverage_min_log2_enrichment": 0.0,
-    "metaspot_cell_coverage_max_binomial_p": 0.50,
-    "metaspot_cell_coverage_min_local_marker_transcripts": 1,
-    "metaspot_cell_coverage_min_local_marker_genes": 1,
-    "metaspot_cell_coverage_min_local_log2_enrichment": 0.0,
-    "metaspot_cell_coverage_min_dgi_support": 0.50,
-    "metaspot_cell_coverage_min_dgi_margin": 0.0,
-    "metaspot_cell_coverage_max_per_label": 1,
-    "metaspot_diminishing_return_selection": False,
-    "metaspot_diminishing_return_labels": [
-        "Nucleolus",
-        "Lamina",
-        "Nuclear Pore",
-        "ER",
-        "OMM",
-    ],
-    "metaspot_diminishing_return_log_penalty": 0.10,
-    "metaspot_diminishing_return_burden_penalty": 0.50,
-    "metaspot_diminishing_return_min_dgi_support": 0.50,
-    "metaspot_hierarchical_cell_rescue": False,
-    "metaspot_hierarchical_min_cell_transcripts": 200,
-    "metaspot_hierarchical_min_metaspots": 20,
-    "metaspot_hierarchical_min_presence_score": 0.55,
-    "metaspot_hierarchical_min_localization_score": 0.55,
-    "metaspot_hierarchical_min_joint_score": 0.60,
-    "metaspot_hierarchical_min_local_marker_transcripts": 1,
-    "metaspot_hierarchical_min_local_marker_genes": 1,
-    "metaspot_hierarchical_min_cell_marker_transcripts": 1,
-    "metaspot_hierarchical_min_cell_marker_genes": 1,
-    "metaspot_hierarchical_min_dgi_support": 0.35,
-    "metaspot_hierarchical_min_dgi_margin": -0.25,
-    "metaspot_omm_cell_coherent_rescue": False,
-    "metaspot_omm_cell_min_marker_transcripts": 8,
-    "metaspot_omm_cell_min_marker_genes": 4,
-    "metaspot_omm_cell_min_log2_enrichment": 0.50,
-    "metaspot_omm_cell_max_binomial_p": 0.05,
-    "metaspot_omm_cell_exploratory_max_binomial_p": 0.20,
-    "metaspot_omm_local_min_marker_transcripts": 2,
-    "metaspot_omm_local_min_marker_genes": 2,
-    "metaspot_omm_local_min_log2_enrichment": 0.50,
-    "metaspot_omm_local_min_score_gap": 0.15,
-    "metaspot_omm_local_min_dgi_support": 0.60,
-    "metaspot_omm_local_min_dgi_margin": 0.0,
-    "metaspot_omm_cell_max_per_cell": 3,
-    "metaspot_result_umap_max_points": 10_000,
-    "metaspot_require_dgi_support": False,
-    "metaspot_min_dgi_support": 0.0,
-    "metaspot_min_dgi_margin": 0.0,
-    "metaspot_min_marker_transcripts": 3,
-    "metaspot_min_marker_genes": 2,
-    "metaspot_min_log2_enrichment": 0.5,
-    "metaspot_min_score_gap": 0.25,
-    "metaspot_subtype_fdr": 0.05,
-    "metaspot_exploratory_max_q": 0.30,
-    "metaspot_background_prior_strength": 2.0,
-    "metaspot_label_thresholds": {},
-    "metaspot_require_omm_confirmation": True,
-    "metaspot_omm_unidentifiable_policy": "unresolved",
-    "nuclear_pore_guard": False,
-    "nuclear_pore_min_margin": 0.75,
-    "nuclear_pore_non_nuclear_top2_min_margin": 5.0,
-    "nuclear_pore_max_q": 0.10,
-    "nuclear_pore_min_channel_support": 3,
-    "nuclear_pore_fallback_label": "Nucleus",
-    "lamina_guard": False,
-    "lamina_min_margin": 1.0,
-    "lamina_non_nuclear_top2_min_margin": 3.0,
-    "lamina_max_q": 0.05,
-    "lamina_min_channel_support": 2,
-    "lamina_boundary_quantile": 0.5,
-    "lamina_fallback_label": "Nucleus",
-    "omm_guard": False,
-    "omm_min_margin": 2.0,
-    "omm_max_q": 0.01,
-    "omm_min_channel_support": 3,
-    "omm_fallback_label": "Cytosol",
-    "apex_omm_specificity_filter": True,
-    "apex_omm_min_log2fc": 0.75,
-    "apex_omm_min_delta": 0.50,
-    "omm_metaspot_refinement": True,
-    "omm_metaspot_apply_to_primary": True,
-    "omm_metaspot_ambiguous_policy": "competitor",
-    "omm_metaspot_min_informative_transcripts": 5,
-    "omm_metaspot_shrinkage_count": 20.0,
-    "omm_metaspot_posterior_high": 0.80,
-    "omm_metaspot_posterior_low": 0.20,
-    "rnalocate_augment_er": False,
-    "rnalocate_species": ["Homo sapiens", "Mus musculus"],
-    "use_manual_markers": False,
-    "fast": False,
-    "leiden_resolution": 5.0,
-    "hvg_n_top_genes": 2000,
-    "pca_n_comps": 32,
-    "neighbors_k": 20,
-    "umap_min_dist": 0.3,
-    "umap_spread": 1.0,
-    "compute_umap": True,
-    "save_umap_plot": True,
-    "save_plots": True,
-    "cluster_rep": "X_dgi_gcn",
-    "require_cluster_rep": False,
+    "method": "evidence",
 }
-
-OMM_POLICIES = frozenset({"strict", "balanced", "audit", "off"})
-LEGACY_OMM_REFINEMENT_KEYS = frozenset(
-    {
-        "omm_metaspot_refinement",
-        "omm_metaspot_apply_to_primary",
-        "omm_metaspot_ambiguous_policy",
-        "omm_metaspot_min_informative_transcripts",
-        "omm_metaspot_shrinkage_count",
-        "omm_metaspot_posterior_high",
-        "omm_metaspot_posterior_low",
-    }
-)
 
 
 def resolve_annotation_configuration(
     config: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """Expand the compact public annotation config into runtime defaults.
-
-    ``annotation.omm_policy`` is the public OMM selector. Existing detailed
-    keys remain accepted as expert overrides. A legacy config without the new
-    selector retains its former strict/audit/off execution semantics.
-    """
+    """Return the annotation section (or a bare annotation mapping) with defaults."""
     if not isinstance(config, Mapping):
         raw: Mapping[str, Any] = {}
     elif "annotation" in config:
-        section = config.get("annotation", {}) or {}
-        if not isinstance(section, Mapping):
+        raw = config.get("annotation", {}) or {}
+        if not isinstance(raw, Mapping):
             raise ValueError("annotation must be a mapping")
-        raw = section
     elif any(
         key in config
         for key in (
-            "io",
-            "module1",
-            "module2",
-            "module3",
-            "module5",
-            "module6",
-            "module7",
-            "module8",
-            "runtime",
-            "run",
+            "io", "module1", "module2", "module3", "module5", "module6",
+            "module7", "module8", "runtime", "run",
         )
     ):
         raw = {}
     else:
         raw = config
-
     resolved = copy.deepcopy(_ANNOTATION_INTERNAL_DEFAULTS)
     resolved.update(copy.deepcopy(dict(raw)))
-
-    configured_policy = raw.get("omm_policy")
-    if configured_policy is None and any(
-        key in raw for key in LEGACY_OMM_REFINEMENT_KEYS
-    ):
-        if not bool(raw.get("omm_metaspot_refinement", True)):
-            policy = "off"
-        elif not bool(raw.get("omm_metaspot_apply_to_primary", True)):
-            policy = "audit"
-        else:
-            policy = "strict"
-    else:
-        policy = str(configured_policy or "balanced").strip().lower()
-    if policy not in OMM_POLICIES:
-        raise ValueError(
-            "annotation.omm_policy must be one of "
-            "{'strict', 'balanced', 'audit', 'off'}"
-        )
-
-    resolved["omm_policy"] = policy
-    resolved["omm_metaspot_refinement"] = policy != "off"
-    resolved["omm_metaspot_apply_to_primary"] = policy in {
-        "strict",
-        "balanced",
-    }
     return resolved
 
 
@@ -347,20 +135,6 @@ def resolve_dgi_configuration(config: Mapping[str, Any]) -> Dict[str, Any]:
         return resolved
 
     unit = dgi_unit_from_config(resolved)
-    annotation = resolved.get("annotation", {}) or {}
-    annotation_unit = (
-        str(annotation.get("unit", "")).strip().lower().replace("_", "-")
-        if isinstance(annotation, Mapping)
-        else ""
-    )
-    if annotation_unit in {"metaspot", "meta-spot", "spot"} and (
-        unit != "metaspot"
-    ):
-        raise ValueError(
-            "annotation.unit='metaspot' requires "
-            "module8.dgi_unit='metaspot' so X_dgi_gcn_metaspot is learned "
-            "before final local annotation"
-        )
     module5 = resolved.setdefault("module5", {})
     module6 = resolved.setdefault("module6", {})
     module7 = resolved.setdefault("module7", {})
@@ -942,7 +716,7 @@ STAGE_PARAM_MAP: Dict[str, Tuple[str, ...]] = {
         'io.final_keep_columns',
     ),
     'annotate': (
-        'annotation.evidence_score','annotation.evidence_unit','annotation.evidence_fdr','annotation.evidence_validation_folds','annotation.evidence_null_sets','annotation.evidence_min_gene_transcripts','annotation.evidence_marker_margin','annotation.evidence_min_resolution','annotation.evidence_bootstrap','annotation.evidence_seed','annotation.reference_exclude_genes_file','annotation.enable','annotation.method','annotation.unit','annotation.decision_mode','annotation.independent_mixed_score_delta','annotation.independent_unknown_label','annotation.independent_geometry_min_abs_r','annotation.independent_domain_compartment_feasibility','annotation.independent_assignment_mode','annotation.independent_exploratory_max_q','annotation.independent_exploratory_min_channel_support','annotation.independent_exploratory_min_score_gap','annotation.independent_subtype_parent_margin','annotation.independent_omm_competitor_margin','annotation.two_stage','annotation.spatial_channel','annotation.low_conf_policy','annotation.low_conf_relaxed_z','annotation.low_conf_relaxed_q','annotation.marker_set_target','annotation.marker_min_weight','annotation.marker_min_margin','annotation.gold_column_normalize','annotation.min_channel_support','annotation.enforce_geometry_consistency','annotation.geometry_quantile','annotation.geometry_channel_weight','annotation.guard_mode','annotation.subtype_fdr','annotation.min_effective_markers','annotation.null_permutations','annotation.null_seed','annotation.single_stage_compartment_score_weight','annotation.single_stage_compartment_score_tau','annotation.single_stage_compartment_guard','annotation.single_stage_compartment_min_abs_r','annotation.single_stage_compartment_max_score_gap','annotation.single_stage_compartment_min_z','annotation.single_stage_compartment_max_q','annotation.single_stage_compartment_min_channel_support','annotation.metaspot_compartment_correction','annotation.metaspot_pool_rep','annotation.metaspot_pool_k','annotation.metaspot_dgi_consensus_weight','annotation.metaspot_dgi_seed_min_marker_transcripts','annotation.metaspot_dgi_seed_min_marker_genes','annotation.metaspot_dgi_seed_min_log2_enrichment','annotation.metaspot_dgi_min_informative_neighbors','annotation.metaspot_dgi_exploratory','annotation.metaspot_dgi_exploratory_min_support','annotation.metaspot_dgi_exploratory_min_margin','annotation.metaspot_cell_coverage_rescue','annotation.metaspot_cell_coverage_labels','annotation.metaspot_cell_coverage_min_marker_transcripts','annotation.metaspot_cell_coverage_min_marker_genes','annotation.metaspot_cell_coverage_min_log2_enrichment','annotation.metaspot_cell_coverage_max_binomial_p','annotation.metaspot_cell_coverage_min_local_marker_transcripts','annotation.metaspot_cell_coverage_min_local_marker_genes','annotation.metaspot_cell_coverage_min_local_log2_enrichment','annotation.metaspot_cell_coverage_min_dgi_support','annotation.metaspot_cell_coverage_min_dgi_margin','annotation.metaspot_cell_coverage_max_per_label','annotation.metaspot_multistructure_first_locus','annotation.metaspot_multistructure_first_locus_min_presence','annotation.metaspot_multistructure_first_locus_min_localization','annotation.metaspot_multistructure_first_locus_min_evidence','annotation.metaspot_multistructure_first_locus_max_projected_burden','annotation.metaspot_fine_min_spatial_coherence','annotation.metaspot_diminishing_return_selection','annotation.metaspot_diminishing_return_labels','annotation.metaspot_diminishing_return_log_penalty','annotation.metaspot_diminishing_return_burden_penalty','annotation.metaspot_diminishing_return_min_dgi_support','annotation.metaspot_hierarchical_cell_rescue','annotation.metaspot_hierarchical_min_cell_transcripts','annotation.metaspot_hierarchical_min_metaspots','annotation.metaspot_hierarchical_min_presence_score','annotation.metaspot_hierarchical_min_localization_score','annotation.metaspot_hierarchical_min_joint_score','annotation.metaspot_hierarchical_min_local_marker_transcripts','annotation.metaspot_hierarchical_min_local_marker_genes','annotation.metaspot_hierarchical_min_cell_marker_transcripts','annotation.metaspot_hierarchical_min_cell_marker_genes','annotation.metaspot_hierarchical_min_dgi_support','annotation.metaspot_hierarchical_min_dgi_margin','annotation.metaspot_omm_cell_coherent_rescue','annotation.metaspot_omm_cell_min_marker_transcripts','annotation.metaspot_omm_cell_min_marker_genes','annotation.metaspot_omm_cell_min_log2_enrichment','annotation.metaspot_omm_cell_max_binomial_p','annotation.metaspot_omm_cell_exploratory_max_binomial_p','annotation.metaspot_omm_local_min_marker_transcripts','annotation.metaspot_omm_local_min_marker_genes','annotation.metaspot_omm_local_min_log2_enrichment','annotation.metaspot_omm_local_min_score_gap','annotation.metaspot_omm_local_min_dgi_support','annotation.metaspot_omm_local_min_dgi_margin','annotation.metaspot_omm_cell_max_per_cell','annotation.metaspot_result_umap_max_points','annotation.metaspot_require_dgi_support','annotation.metaspot_min_dgi_support','annotation.metaspot_min_dgi_margin','annotation.metaspot_min_marker_transcripts','annotation.metaspot_min_marker_genes','annotation.metaspot_min_log2_enrichment','annotation.metaspot_min_score_gap','annotation.metaspot_subtype_fdr','annotation.metaspot_exploratory_max_q','annotation.metaspot_background_prior_strength','annotation.metaspot_label_thresholds','annotation.metaspot_unresolved_nuclear_label','annotation.metaspot_unresolved_cytoplasmic_label','annotation.metaspot_require_omm_confirmation','annotation.metaspot_omm_unidentifiable_policy','annotation.nuclear_pore_guard','annotation.nuclear_pore_min_margin','annotation.nuclear_pore_non_nuclear_top2_min_margin','annotation.nuclear_pore_max_q','annotation.nuclear_pore_min_channel_support','annotation.nuclear_pore_fallback_label','annotation.lamina_guard','annotation.lamina_min_margin','annotation.lamina_non_nuclear_top2_min_margin','annotation.lamina_max_q','annotation.lamina_min_channel_support','annotation.lamina_boundary_quantile','annotation.lamina_fallback_label','annotation.omm_guard','annotation.omm_min_margin','annotation.omm_max_q','annotation.omm_min_channel_support','annotation.omm_fallback_label','annotation.apex_omm_specificity_filter','annotation.apex_omm_min_log2fc','annotation.apex_omm_min_delta','annotation.omm_policy','annotation.omm_metaspot_refinement','annotation.omm_metaspot_apply_to_primary','annotation.omm_metaspot_ambiguous_policy','annotation.omm_metaspot_min_informative_transcripts','annotation.omm_metaspot_shrinkage_count','annotation.omm_metaspot_posterior_high','annotation.omm_metaspot_posterior_low','annotation.rnalocate_augment_er','annotation.rnalocate_species','annotation.use_manual_markers','annotation.hvg_n_top_genes','annotation.pca_n_comps','annotation.neighbors_k','annotation.umap_min_dist','annotation.umap_spread','annotation.umap_neighbors_key','annotation.leiden_resolution','annotation.compute_umap','annotation.save_umap_plot','annotation.save_plots','annotation.fast','annotation.cluster_rep','annotation.require_cluster_rep','module7.rep_priority','module7.neighbors','io.write_diagnostic_tables','io.write_diagnostic_csv','io.write_diagnostic_parquet','io.broadcast_metaspot_diagnostics_to_transcripts',
+        'annotation.enable','annotation.method','annotation.evidence_score','annotation.evidence_unit','annotation.evidence_fdr','annotation.evidence_validation_folds','annotation.evidence_null_sets','annotation.evidence_min_gene_transcripts','annotation.evidence_marker_margin','annotation.evidence_min_resolution','annotation.evidence_bootstrap','annotation.evidence_seed','annotation.reference_exclude_genes_file','annotation.apex_omm_specificity_filter','annotation.apex_omm_min_log2fc','annotation.apex_omm_min_delta','annotation.rnalocate_species','annotation.rnalocate_augment_er',
     ),
     'write_outputs': (
         'io.final_format','io.h5ad_compression','io.write_csv_copy','io.write_diagnostic_tables',

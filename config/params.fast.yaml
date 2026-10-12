@@ -13,10 +13,5 @@ module7:
 module8:
   dgi_epochs: 120
 
-annotation:
-  compute_umap: false
-  save_umap_plot: false
-  save_plots: false
-
 io:
   write_intermediate_figures: false

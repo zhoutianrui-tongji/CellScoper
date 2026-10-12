@@ -46,217 +46,14 @@ This document describes the configuration options read from `config/params.yaml`
 
 ## annotation
 
-The packaged YAML exposes workflow controls and the production MetaSpot
-evidence gates. Lower-level statistical and legacy guard settings retain
-stable internal defaults and remain accepted as expert overrides.
+- `enable` (bool): Run subcellular annotation. Default: `true`.
+- `method` (`evidence|none`): `evidence` is the only annotation method; `none`
+  skips annotation. The earlier RAP-X method and its parameters were removed
+  (last available at the git tag `legacy-rapx`); `method: rapx` is rejected
+  with an error.
 
-- `enable` (bool): Enable RAP-X annotation. Default: `true`.
-- `method` (str): Annotation implementation. Currently `rapx`.
-- `unit` (`metaspot|metadomain|leiden`): Annotation decision unit. The packaged
-  YAML uses `metaspot`; the backward-compatible internal default remains
-  `metadomain`.
-  - `metaspot`: run RAP-X on MetaDomains only to establish a broad
-    nuclear/cytoplasmic prior, then combine pooled marker enrichment with a
-    leave-one-out, same-cell/same-prior neighborhood consensus from
-    `X_dgi_gcn_metaspot`. Fine labels compete only inside that compartment.
-    Insufficient evidence falls back to `Nucleus` or `Cytosol`, keeping
-    `subcellular_annotation` strictly within the established seven classes;
-    uncertainty remains explicit in `subcellular_fine_state`,
-    `subcellular_fine_supported`, and the fallback-reason columns.
-  - `metadomain`: make and transfer the complete RAP-X label at MetaDomain
-    resolution.
-  - `leiden`: make one RAP-X decision per annotation Leiden cluster.
-- `decision_mode` (`independent|legacy`): Label decision protocol. Default:
-  `independent`.
-- `two_stage` (bool): Optional routed two-stage enrichment. Default: `false`.
-- `spatial_channel` (bool): Include the RAP-X spatial channel. Default: `true`.
-- `metaspot_compartment_correction` (bool): Select the native-MetaSpot
-  compartment-consistent track as production output. The local side uses
-  `r_p50`; corrected and uncorrected tracks remain available. Default: `true`.
-- `metaspot_pool_rep` (str), `metaspot_pool_k` (int): Native MetaSpot DGI
-  representation and same-cell/same-compartment neighborhood size used by
-  hybrid MetaSpot annotation. Defaults: `X_dgi_gcn_metaspot`, `8`.
-- `metaspot_dgi_consensus_weight` (float): weight used in the audit-only fused
-  score and the DGI evidence branch. It does not select the focal local
-  candidate and does not enter the strict marker/count/enrichment/q-value
-  gate. DGI can support an explicitly configured hard gate, exploratory
-  rescue, cell-coverage rescue, and OMM-coherence rescue; a MetaSpot never
-  votes for itself. Packaged default: `0.6`.
-- `metaspot_dgi_seed_min_marker_transcripts` (int),
-  `metaspot_dgi_seed_min_marker_genes` (int),
-  `metaspot_dgi_seed_min_log2_enrichment` (float), and
-  `metaspot_dgi_min_informative_neighbors` (int): define which unpooled
-  MetaSpot marker calls may seed the independent DGI consensus and how many
-  such neighbors are required. Packaged defaults: `1`, `1`, `0.05`, `2`.
-- `metaspot_dgi_exploratory` (bool): allow a candidate that passes all marker
-  amount/enrichment/separation gates, but not the BH threshold, to enter a
-  separately tagged exploratory tier when leave-one-out DGI agreement is
-  strong. Strict calls remain FDR-controlled. Default: `true`.
-- `metaspot_dgi_exploratory_min_support` (float) and
-  `metaspot_dgi_exploratory_min_margin` (float): minimum neighbor-vote share
-  and lead over the next label for that exploratory tier. Packaged defaults:
-  `0.55`, `0.05`.
-- `metaspot_cell_coverage_rescue` (bool): recover a missing Nucleolus, Lamina,
-  Nuclear Pore, or ER label only when the same cell has coherent multi-gene
-  evidence in the matching broad compartment and one focal MetaSpot also
-  passes its local marker and leave-one-out DGI gates. This is a bounded
-  discovery rescue, not a per-cell label quota. Labels are evaluated against
-  their own evidence arrays, so a valid secondary fine structure is not lost
-  merely because another marker label had the largest local enrichment.
-  Packaged default: `true`.
-- `metaspot_cell_coverage_min_marker_transcripts` (int),
-  `metaspot_cell_coverage_min_marker_genes` (int),
-  `metaspot_cell_coverage_min_log2_enrichment` (float), and
-  `metaspot_cell_coverage_max_binomial_p` (float): cell-level presence gates
-  for that rescue. The packaged discovery profile uses two distinct marker
-  genes plus enrichment above `-0.5`; its binomial p value is retained for
-  audit rather than used as a significance veto because low-depth cells make
-  that test underpowered. Packaged defaults: `2`, `2`, `-0.5`, and `1.0`.
-- `metaspot_cell_coverage_min_local_marker_transcripts` (int),
-  `metaspot_cell_coverage_min_local_marker_genes` (int), and
-  `metaspot_cell_coverage_min_local_log2_enrichment` (float): focal MetaSpot
-  anchor gates for label-wise coverage rescue. The cell-level multi-gene gate
-  remains separate. Packaged defaults: `2`, `2`, and `0.0`.
-- `metaspot_cell_coverage_min_dgi_support` (float),
-  `metaspot_cell_coverage_min_dgi_margin` (float), and
-  `metaspot_cell_coverage_max_per_label` (int): local DGI placement gates and
-  the maximum number of rescued MetaSpots per missing label per cell. Because
-  DGI seeds use the winning local label, the label-wise secondary-structure
-  branch requires an informative neighborhood but treats its label vote as
-  audit-only; the two-gene focal marker gate remains mandatory. Packaged
-  defaults: `0.0`, `-1.0`, and `1`.
-- `metaspot_diminishing_return_selection` (bool) and
-  `metaspot_diminishing_return_labels` (list): apply one shared post-selection
-  guard to the configured fine structures after all strict, local, cell-level,
-  hierarchical, and OMM branches converge. The strongest first locus is always
-  retained and strict loci are never pruned. Packaged defaults: `false` and all
-  five fine structures; the shipped discovery profile enables the guard.
-- `metaspot_diminishing_return_log_penalty` (float) and
-  `metaspot_diminishing_return_burden_penalty` (float), and
-  `metaspot_diminishing_return_min_dgi_support` (float): raise the evidence
-  required for each additional same-cell, same-structure locus according to
-  `log1p(number already retained)` and the already assigned fraction of the
-  matching nuclear or cytoplasmic transcript pool while keeping the repeat
-  guard independent of the more permissive coverage-rescue DGI threshold.
-  Packaged defaults: `0.10`, `0.50`, and `0.50`.
-- `metaspot_hierarchical_cell_rescue` (bool): final Tier-B branch for a cell
-  that still has no supported fine structure. It emits at most one fine label
-  per callable cell and requires label-specific cell-level marker presence, a
-  measured marker in the focal MetaSpot, and leave-one-out DGI localization.
-  This is not a per-cell quota. Packaged default: `true`.
-- `metaspot_hierarchical_min_cell_transcripts` (int) and
-  `metaspot_hierarchical_min_metaspots` (int): define whether a cell has enough
-  observations for Tier-B fine-structure calling. Cells below either threshold
-  retain their broad Nucleus/Cytosol fallback. Packaged defaults: `200` and
-  `20`.
-- `metaspot_hierarchical_min_presence_score` (float),
-  `metaspot_hierarchical_min_localization_score` (float), and
-  `metaspot_hierarchical_min_joint_score` (float): thresholds for the bounded
-  `[0, 1]` evidence scores. Presence combines cell-level marker counts, genes,
-  enrichment, and binomial evidence; localization combines focal markers with
-  DGI support; joint is their geometric mean. These values are audit scores,
-  not calibrated probabilities. Packaged defaults: `0.55`, `0.55`, `0.60`.
-- `metaspot_hierarchical_min_local_marker_transcripts` (int),
-  `metaspot_hierarchical_min_local_marker_genes` (int),
-  `metaspot_hierarchical_min_cell_marker_transcripts` (int), and
-  `metaspot_hierarchical_min_cell_marker_genes` (int): non-negotiable measured
-  marker floors for Tier-B emission. Packaged defaults are all `1`.
-- `metaspot_hierarchical_min_dgi_support` (float) and
-  `metaspot_hierarchical_min_dgi_margin` (float): non-negotiable DGI floors.
-  The slightly negative margin permits a marker-coherent secondary structure
-  to survive winner-takes-all competition, while still rejecting strong DGI
-  conflict. Packaged defaults: `0.35` and `-0.25`.
-  The output audit field `subcellular_metaspot_hierarchical_cell_status`
-  records `not_callable`, `already_has_fine_structure`,
-  `no_anchored_candidate`, `score_below_threshold`, or `selected`; the
-  corresponding best anchored label and evidence scores are retained in
-  `subcellular_metaspot_hierarchical_best_*` columns.
-- `metaspot_require_dgi_support` (bool), `metaspot_min_dgi_support` (float),
-  and `metaspot_min_dgi_margin` (float): optionally make DGI agreement a hard
-  support gate instead of only a scored evidence branch. Defaults: `false`,
-  `0.0`, `0.0`.
-- `metaspot_min_marker_transcripts` (int), `metaspot_min_marker_genes` (int),
-  `metaspot_min_log2_enrichment` (float), `metaspot_min_score_gap` (float):
-  minimum local evidence before a subtype can replace its broad prior.
-  Packaged defaults: `1`, `1`, `0.05`, `0.03`.
-- `metaspot_subtype_fdr` (float), `metaspot_exploratory_max_q` (float): strict
-  and exploratory label-wise BH thresholds. Packaged defaults: `0.15`, `0.70`.
-- `metaspot_background_prior_strength` (float): pseudocount strength used when
-  comparing pooled marker proportions with compartment-wide background.
-  Packaged default: `1.0`.
-- `metaspot_label_thresholds` (mapping): exact per-label overrides for
-  `min_marker_transcripts`, `min_marker_genes`, `min_log2_enrichment`,
-  `min_score_gap`, `subtype_fdr`, `exploratory_max_q`, `min_dgi_support`, and
-  `min_dgi_margin`. Unknown labels or fields are rejected rather than ignored.
-- `metaspot_require_omm_confirmation` (bool): when the independent OMM model
-  is identifiable, require its domain/local posterior audit to confirm a local
-  OMM candidate. Default: `true`.
-- `metaspot_omm_unidentifiable_policy` (`unresolved|strict_local`): behavior
-  when independent OMM confirmation is unavailable. `unresolved` keeps strict
-  local OMM candidates in audit columns and falls back to `Cytosol`;
-  `strict_local` permits strict marker-only OMM calls in the refinement track.
-  Packaged default: `strict_local`; the packaged `omm_policy: audit` still
-  prevents that refinement track from replacing the primary public label.
-- `metaspot_omm_cell_coherent_rescue` (bool): use pooled, multi-gene OMM
-  evidence at the cell level to localize a bounded number of OMM MetaSpots.
-  Each emitted locus must still pass the configured local marker amount,
-  enrichment, OMM-over-ER/Cytosol separation, and leave-one-out DGI gates.
-  Packaged default: `true`.
-- `metaspot_omm_cell_min_marker_transcripts` (int),
-  `metaspot_omm_cell_min_marker_genes` (int),
-  `metaspot_omm_cell_min_log2_enrichment` (float), and
-  `metaspot_omm_cell_max_binomial_p` (float): pooled cell-level OMM presence
-  gates. Packaged defaults: `6`, `3`, `0.25`, and `1.0`; the low-depth
-  binomial p-value is therefore retained for audit rather than used as a veto
-  after the marker, local-separation, and DGI gates pass.
-- `metaspot_omm_cell_exploratory_max_binomial_p` (float): relaxed cell-level
-  p-value used only for the OMM sensitivity/audit tier. The local marker,
-  OMM-over-ER/Cytosol, and DGI gates remain identical, and these rows never
-  overwrite `subcellular_annotation`. Packaged default: `1.0`.
-- `metaspot_omm_local_min_marker_transcripts` (int) and
-  `metaspot_omm_local_min_marker_genes` (int): minimum focal evidence used to
-  place OMM within an eligible cell. Packaged defaults are `1` and `1` because
-  MetaSpots are small; this local anchor cannot emit OMM without the cell-level
-  multi-gene, local enrichment/separation, and DGI gates.
-- `metaspot_omm_local_min_dgi_support` (float) and
-  `metaspot_omm_local_min_dgi_margin` (float): minimum leave-one-out neighbor
-  agreement used by the cell-coherent OMM localization path. Packaged
-  defaults: `0.50`, `0.0`.
-- `metaspot_omm_cell_max_per_cell` (int): maximum number of already
-  evidence-qualified OMM loci selected in one cell. It is a cap, not a quota;
-  cells without coherent OMM evidence still receive no OMM call. Packaged
-  default: `5`.
-- `omm_policy` (`strict|balanced|audit|off`): Public OMM selector.
-  - `strict`: require a confirmed OMM MetaDomain and local posterior at or
-    above the internal high threshold.
-  - `balanced`: also allow a locally high posterior to resolve an ER/OMM-shared
-    MetaDomain to OMM. Unresolved shared evidence remains in audit columns and
-    falls back to its ER/Cytosol competitor in the primary seven-class output.
-  - `audit`: compute OMM refinement columns without replacing the primary
-    annotation.
-  - `off`: skip MetaSpot OMM refinement.
-  Packaged default: `audit`.
-- `cluster_rep` (str): Preferred annotation representation:
-  `X_dgi_gcn|X_dgi_sage|X_expr|X_pca|auto`. Default: `X_dgi_gcn`.
-- `save_plots` (bool): Write annotation diagnostics. Default: `true`.
-
-### Annotation expert overrides
-
-Existing detailed keys remain backward compatible, including
-`independent_*`, `marker_*`, `guard_mode`, `subtype_fdr`,
-`min_effective_markers`, `null_*`, `apex_omm_*`,
-`omm_metaspot_posterior_*`, `omm_metaspot_min_informative_transcripts`,
-`omm_metaspot_shrinkage_count`, clustering/UMAP settings, and legacy
-`single_stage_*`, `nuclear_pore_*`, `lamina_*`, and `omm_guard` settings.
-
-A legacy configuration without `omm_policy` keeps its former behavior:
-`omm_metaspot_refinement: false` maps to `off`;
-`omm_metaspot_apply_to_primary: false` maps to `audit`; otherwise it maps to
-`strict`. When `omm_policy` is explicitly present, it is authoritative.
-
-### Evidence annotation (`annotation.method: evidence`)
-An alternative to RAP-X with a handful of parameters and a built-in check of
-its own labels. For each MetaSpot it compares observed marker transcripts with
+### Evidence annotation
+A handful of parameters and a built-in check of its own labels. For each MetaSpot it compares observed marker transcripts with
 what the owning cell's RNA mixture predicts, tests the excess against copies
 of the data with gene identities shuffled within cells, and then validates each structure by holding marker
 genes out (every gene exactly once) and asking whether they land in the
@@ -449,44 +246,8 @@ MetaDomains. The default `params.yaml` remains the production profile.
 - `h5ad_compression_override` (bool): Respect IO compression override for `adata2`. Default: `true`.
 - `save_shape_summary` (bool): Save `module6_adata2_shape.*`. Default: `true`.
 
-After annotation, enabled intermediate figures also include
-`metadomain_annotation_quality.png`. This quantitative diagnostic reports
-MetaDomain sizes, leave-one-out within-domain
-embedding coherence, nuclear/cytoplasmic purity, domain-to-final label
-transfer, and MetaSpot-weighted label composition. Its source tables are
-saved as `metadomain_quality_by_domain.*`,
-`metadomain_annotation_transfer.*`, and
-`metadomain_label_composition.*`.
-
-The final MetaSpot-resolution result is written to
-`metaspot_annotation_result.png`. Its UMAP panels compare inherited
-MetaDomain evidence with `subcellular_annotation` (also mirrored in
-`subcellular_fine_annotation`); the lower panels show
-label transfer and exact decision provenance. The UMAP is diagnostic context,
-not evidence of correctness. Exact values are saved in
-`metaspot_annotation_summary.*`, `metaspot_fine_annotation_summary.*`,
-`metaspot_fine_decision_provenance.*`, `metaspot_annotation_updates.*`, and
-`metaspot_annotation_umap_coordinates.*` when diagnostic table writing is
-enabled. Transcript-level seven-class coverage is written once as
-`final_annotation_proportions.*`; the compatibility alias
-`subcellular_fine_annotation` does not create a duplicate summary. Hybrid
-MetaSpot mode additionally writes
-`metaspot_local_annotation_scores.*`, including the broad parent, local
-marker-only candidate, fused marker/DGI candidate, DGI support and margin,
-pooled marker counts, enrichment, binomial p-value, label-wise BH q-value,
-applied label-specific thresholds, final tier, OMM confirmation status,
-decision provenance, and explicit fallback reason for every MetaSpot. For very
-large datasets the UMAP display is capped at 50,000
-MetaSpots using cell-and-label-stratified sampling; the summary calculations
-always use all MetaSpots.
-
-RAP-X confirmatory evidence is stored in `rapx_annotation_scores.*`,
-`rapx_metadomain_evidence.*`, `rapx_candidate_to_strict.*`, and
-`rapx_candidate_evidence_tier.*`. These are audit-only tables. The pipeline
-does not emit a strict-call UMAP because strict `Unknown` denotes absence of
-confirmatory FDR support rather than the final biological label. Each run also
-writes `OUTPUT_GUIDE.md` at the output root to separate production files,
-recommended result figures, method QC, audit tables, and checkpoints.
+Each run writes `OUTPUT_GUIDE.md` at the output root, listing the production
+files, the annotation columns and the diagnostics that were produced.
 
 Every CLI run writes `run_manifest.json` with status, effective configuration
 hash, input/reference identity, source-tree identity, runtime overrides, and
@@ -534,8 +295,6 @@ the pipeline will not label an unannotated or stale result as successful.
     implementation does not silently fall back or pretend that an oversized
     MetaSpot graph completed. Its packaged default is `200000`; raising it
     only disables the guard and does not reduce full-batch memory cost.
-  `annotation.unit: metaspot` requires `dgi_unit: metaspot`; incompatible
-  configurations fail during loading before a costly pipeline run begins.
 - `dgi_framework` (`cell_aware_dmgi|standard_dgi`): training objective. The
   packaged default, `cell_aware_dmgi`, uses two relation-specific residual GCN
   encoders: the cross-cell expression graph and the within-cell spatial graph.
@@ -659,7 +418,6 @@ io:
   final_format: csv
 annotation:
   enable: true
-  omm_policy: balanced
 ```
 
 Parquet output + strong pruning + faster DGI:

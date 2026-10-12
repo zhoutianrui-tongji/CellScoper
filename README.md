@@ -13,9 +13,9 @@ then learn `X_dgi_gcn_metaspot` before M5 MetaDomain clustering and M6 pooling.
 The default Cell-Aware Deep Multiplex Graph Infomax (CA-DMGI) keeps cross-cell
 expression similarity and within-cell spatial continuity as separate graph
 relations, learns a bounded per-MetaSpot consensus gate, and supplies the
-embedding to stability-selected consensus Leiden. RAP-X then combines broad
-MetaDomain evidence, focal MetaSpot
-markers, and explicit same-cell DGI support/rescue branches. No subcellular
+embedding to stability-selected consensus Leiden. The evidence annotation then
+scores each MetaSpot against the RNA mixture of its own cell and validates
+every structure on held-out reference marker genes. No subcellular
 gold label is used to train the representation or clustering. With
 `dgi_unit: metadomain`, M5/M6 run first and the legacy single-graph DGI path is
 trained on `adata2` instead.
@@ -178,39 +178,24 @@ remaining 100k-cell validation gates.
 
 ## Outputs
 
-- `adata1.h5ad`: final MetaSpot-level object. The user-facing fine result
-  remains `obs["subcellular_annotation"]`. Explicit audit tracks include
-  `subcellular_annotation_domain`,
-  `subcellular_annotation_metaspot_uncorrected`, and
-  `subcellular_annotation_metaspot_corrected`. With `annotation.unit:
-  metaspot`, additional audit columns record the MetaDomain broad parent,
-  same-cell DGI-neighborhood candidate, strict/exploratory local calls,
-  marker evidence, q-value, and fallback reason. The alias
-  `subcellular_fine_annotation` carries the same seven-class result;
-  unsupported MetaSpots fall back to `Nucleus`/`Cytosol`, with uncertainty
-  retained in `subcellular_fine_state` and support/reason columns. When
-  annotation plots are enabled,
-  `obsm["X_umap_metaspot"]` stores the full MetaSpot UMAP for datasets within
-  the plotting limit. With `io.drop_embeddings: true`, the final file instead
-  retains only the canonical `X_dgi_gcn_metaspot` representation plus
-  annotation/audit columns; auxiliary embeddings and graph matrices are
-  omitted to keep large outputs portable.
+- `adata1.h5ad`: final MetaSpot-level object. Annotation columns in `obs`:
+  `subcellular_annotation` (structures that passed held-out validation in this
+  dataset, otherwise `Nucleus`/`Cytosol`), `subcellular_annotation_exploratory`
+  (relaxed validation), `subcellular_annotation_complete` (all seven structures
+  placed in every cell, not gated by validation), the MetaDomain summary
+  `subcellular_annotation_domain`, and per-structure `subcellular_score__*` /
+  `subcellular_q__*`. With `io.drop_embeddings: true`, the final file retains
+  only the canonical `X_dgi_gcn_metaspot` representation plus annotation
+  columns.
 - `adata2.h5ad`: internal MetaDomain evidence object (after M6–M8).
 - `final_data.csv|parquet`: transcript-level results including the canonical
-  `metaspot_in_cell`, `metaspot`, `meta-domain`, broad-compatible annotation,
-  and evidence-qualified fine-annotation columns.
+  `metaspot_in_cell`, `metaspot`, `meta-domain` and the annotation columns.
+- `evidence_annotation_report.json`: per-structure held-out marker enrichment,
+  confidence interval and whether the structure is supported in this dataset.
 - `effective_params.yaml`, `params_used.yaml`, `run_manifest.json`: exact
   effective configuration and run/input/reference/code provenance.
 - `OUTPUT_GUIDE.md`: generated index separating production results,
   publication-facing figures, method QC, audit-only tables, and checkpoints.
-- `intermediate_results/metaspot_annotation_result.png`: four-panel MetaSpot result
-  view comparing inherited MetaDomain evidence, evidence-qualified fine
-  annotation, label transfer, and exact decision provenance. Companion summary
-  and plotted-coordinate tables are saved with the `metaspot_annotation_*`
-  and `metaspot_fine_*` prefixes.
-- `intermediate_results/final_annotation_proportions.png`: the single canonical
-  per-cell composition summary. The compatibility alias
-  `subcellular_fine_annotation` does not generate a duplicate figure.
 - `intermediate_results/module8_ca_dmgi_training.png`: CA-DMGI relation-specific
   expression/spatial Infomax losses and consensus-gate trajectory; it is model
   QC, not an annotation-accuracy figure. Exact epoch histories and final graph/
@@ -219,8 +204,5 @@ remaining 100k-cell validation gates.
 - `intermediate_results/metadomain_consensus_leiden_diagnostics.png`: candidate
   resolution stability, granularity, small-cluster fraction and cross-cell
   recurrence. Exact candidate values are saved in the companion table.
-- RAP-X confirmatory-FDR results are retained as `rapx_*` audit tables only.
-  A strict-call UMAP is deliberately not generated because strict `Unknown`
-  means “not confirmatory-FDR supported”, not the final public annotation.
 
 The historical `cellscope` command remains available as a compatibility alias. Old checkpoints containing `cluster_in_cell` or `cell_sub` are migrated to `metaspot_in_cell` and `metaspot` when loaded.

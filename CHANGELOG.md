@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) and this project adheres to Semantic Versioning.
 
 ## [Unreleased]
+### Removed
+- The RAP-X annotation and its MetaSpot refinement, rescue and OMM refinement
+  branches, with their 150+ `annotation.*` parameters, audit tables and
+  figures. `annotation.method: evidence` is now the only method and the
+  default; `method: rapx` raises an error. The last version containing RAP-X
+  is the git tag `legacy-rapx`. Columns that only RAP-X produced (for example
+  `subcellular_confidence`, `subcellular_annotation_provenance`,
+  `subcellular_metaspot_*`, `omm_*`) are no longer written.
 ### Fixed
 - Consensus Leiden resolution selection no longer flips between the finest
   and coarsest candidate on identical inputs: near-best candidates are treated
@@ -38,7 +46,7 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
   validated on held-out marker genes; only structures supported in the current
   dataset enter `subcellular_annotation`. A resolution gate reports
   Nucleus/Cytosol only when gene positions carry no reproducible signal.
-  RAP-X remains the default.
+  It is now the only annotation method.
 - `module1.boundary_distance: edge` for exact point-to-polygon distances.
 - `annotation.reference_exclude_genes_file` and `benchmarks/evaluate_run.py`
   for held-out marker validation of annotation labels.

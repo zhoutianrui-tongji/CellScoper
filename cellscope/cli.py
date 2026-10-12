@@ -19,7 +19,6 @@ import yaml
 
 from .io import read_table_preview
 from .config import (
-    LEGACY_OMM_REFINEMENT_KEYS,
     get_default_params_path,
     load_params_yaml,
     resolve_dgi_configuration,
@@ -115,28 +114,6 @@ def _merge_with_defaults(default_cfg: dict, user_cfg: dict) -> dict:
             if v_user is not None:
                 d[k] = v_user
     return d
-
-
-def _preserve_legacy_omm_policy(
-    merged_cfg: dict,
-    user_cfg: dict,
-) -> dict:
-    """Keep pre-policy user YAML from inheriting the new balanced default."""
-    user_annotation = (
-        user_cfg.get("annotation", {})
-        if isinstance(user_cfg, dict)
-        else {}
-    )
-    if (
-        isinstance(user_annotation, dict)
-        and "omm_policy" not in user_annotation
-        and any(
-            key in user_annotation
-            for key in LEGACY_OMM_REFINEMENT_KEYS
-        )
-    ):
-        merged_cfg.setdefault("annotation", {}).pop("omm_policy", None)
-    return merged_cfg
 
 
 def _with_output_directory_lock(func):
@@ -245,10 +222,7 @@ def main(spatial, cell_boundaries, nucleus_boundaries, out_dir, gold_data, no_re
     )
     try:
         cfg = resolve_dgi_configuration(
-            _preserve_legacy_omm_policy(
-                _merge_with_defaults(default_cfg, user_cfg),
-                user_cfg,
-            )
+            _merge_with_defaults(default_cfg, user_cfg)
         )
     except ValueError as exc:
         raise click.ClickException(
