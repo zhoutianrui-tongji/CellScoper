@@ -8636,6 +8636,13 @@ def _write_output_guide(
 - `subcellular_annotation`: the final label. Inside each cell every one of the
   seven structures is placed on its best-scoring unit, so nearly every cell
   shows all seven. It is not gated by validation.
+- `subcellular_annotation_support`: how far each final label can be trusted.
+  `segmentation`: Nucleus/Cytosol, decided by the nuclear boundary.
+  `validated`: the structure passed held-out marker validation in this dataset;
+  such regions carry more of its marker RNA than the rest of the cell, typically
+  by a few tens of percent, so read them as "enriched for", not "is".
+  `unvalidated`: placed where the reference genes point, without support in
+  this dataset; do not base conclusions on these.
 - `subcellular_annotation_validated`: only structures that passed the built-in
   held-out marker validation in this dataset; everything else is `Nucleus` or
   `Cytosol`. Use it for claims that a structure is really there.
@@ -8647,6 +8654,11 @@ def _write_output_guide(
   confidence interval, the level used, and whether it is supported.
   `unsupported_structures` lists the structures whose final labels are a best
   guess from the reference rather than a validated call.
+
+Comparing cells: a fine structure is given at least one unit per cell, so its
+share of a cell's transcripts mostly reflects how many units the cell has. Use
+the `subcellular_score__*` columns, not label shares, to compare how much of a
+structure different cells or cell types have.
 
 ## Clustering and method diagnostics (when figure output is enabled)
 
@@ -9912,7 +9924,7 @@ def _run_pipeline_impl(
                     module1_cfg.get("use_input_nucleus_flags", False)
                 ),
             )
-            if bool(module1_cfg.get("remove_foreign_transcripts", False)):
+            if bool(module1_cfg.get("remove_foreign_transcripts", True)):
                 from .spillover import relative_type_expression
 
                 keep = relative_type_expression(spatial_df) > float(

@@ -183,6 +183,7 @@ def test_default_annotation_config_resolves_production_defaults():
     assert config["module8"]["dgi_local_loss_weight"] == 0.0
 
     assert public["method"] == "evidence"
+    assert config["module1"]["remove_foreign_transcripts"] is True
     assert set(public) - {"enable", "method"} == {
         key for key in public if key.startswith("evidence_")
     }

@@ -6,6 +6,11 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 
 ## [Unreleased]
 ### Changed
+- `module1.remove_foreign_transcripts` is on by default.
+- New column `subcellular_annotation_support` grades every final label as
+  `segmentation`, `validated` or `unvalidated`.
+- Validated structures take every unit that scores clearly above the cell's
+  average, not only one unit per cell.
 - `subcellular_annotation` is now the seven-structure label (previously
   `subcellular_annotation_complete`). The labels restricted to structures that
   pass held-out validation moved to `subcellular_annotation_validated`.
@@ -41,7 +46,7 @@ The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) a
 ### Added
 - `subcellular_annotation_complete` (evidence annotation): all seven structures
   placed in every cell at their best-scoring unit, independent of validation.
-- `module1.remove_foreign_transcripts` (off by default) drops transcripts whose
+- `module1.remove_foreign_transcripts` drops transcripts whose
   gene is foreign to the cell's type, i.e. likely spillover from a neighbouring
   cell, before MetaSpots are built.
 - `annotation.method: evidence`: an alternative annotation with ten

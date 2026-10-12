@@ -60,12 +60,16 @@ genes out (every gene exactly once) and asking whether they land in the
 labelled regions: the typical held-out marker gene must be more enriched there
 than the typical other gene.
 
-Three label columns are written:
+Label columns:
 
 - `subcellular_annotation` is the final label. Inside each cell, every
   structure is placed on the unit with its highest score (never across the
   nuclear boundary), so nearly every cell shows all seven structures. It is not
   gated by validation.
+- `subcellular_annotation_support` grades each final label: `segmentation`
+  (Nucleus/Cytosol, from the nuclear boundary), `validated` (the structure
+  passed the held-out check in this dataset) or `unvalidated` (placed where
+  the reference genes point, without support in this dataset).
 - `subcellular_annotation_validated` keeps only structures that pass the
   held-out check in the current dataset, after adjusting for all
   structure/level combinations; other units are `Nucleus` or `Cytosol`.
@@ -119,9 +123,11 @@ labels are a best guess from the reference.
   a neighbouring cell before any analysis. Cells are grouped into coarse types;
   a transcript is dropped when its gene is expressed in the cell's type at no
   more than `foreign_max_relative_expression` (default `0.2`) of the level in
-  the type that expresses it most. Recommended for tissue sections, where
-  mis-segmented neighbour transcripts form patches that look like subcellular
-  structure. Default: `false`. Changing it reruns from preprocessing.
+  the type that expresses it most. Mis-segmented neighbour transcripts form
+  patches that look like subcellular structure, so this is on by default
+  (about 5-6% of transcripts in the tissue sections tested). It can be turned
+  off for sparse cultured cells that do not touch. Default: `true`. Changing it
+  reruns from preprocessing.
 - `winsor_perc_low`/`winsor_perc_high` (int, 0–100): Winsorization percentiles. Default: `1`, `99`.
 
 ## module2 (Composition embeddings)

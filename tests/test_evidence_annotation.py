@@ -137,3 +137,14 @@ def test_only_supported_structures_extend_beyond_their_seat():
     assert (wide == 1).sum() == 5                                     # unsupported structure stays at its seat
     assert (wide == 0).sum() > 5                                      # supported structure takes more units
     assert ((plain >= 0) <= (wide >= 0)).all() and (wide[plain >= 0] == plain[plain >= 0]).all()
+
+
+def test_support_column_grades_every_final_label():
+    frame, reference = _synthetic()
+    table, report = run_evidence_annotation(frame, reference, FAST)
+    support = table["subcellular_annotation_support"]
+    label = table["subcellular_annotation"]
+    assert set(support) <= {"segmentation", "validated", "unvalidated"}
+    assert (support[label.isin(["Nucleus", "Cytosol"])] == "segmentation").all()
+    assert (support[label.isin(report["supported_structures"])] == "validated").all()
+    assert (support[label.isin(report["unsupported_structures"])] == "unvalidated").all()

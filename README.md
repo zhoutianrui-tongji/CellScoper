@@ -181,6 +181,8 @@ remaining 100k-cell validation gates.
 - `adata1.h5ad`: final MetaSpot-level object. Annotation columns in `obs`:
   `subcellular_annotation` (the final label: all seven structures placed in
   every cell at their best-scoring unit, not gated by validation),
+  `subcellular_annotation_support` (`segmentation`, `validated` or
+  `unvalidated`: how far each final label can be trusted),
   `subcellular_annotation_validated` (only structures that passed held-out
   validation in this dataset, otherwise `Nucleus`/`Cytosol`),
   `subcellular_annotation_exploratory` (relaxed validation), the MetaDomain summary

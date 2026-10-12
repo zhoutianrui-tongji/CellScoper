@@ -612,7 +612,8 @@ def run_evidence_annotation(
 
     ``transcripts`` needs ``cell_id``, ``feature_name``, ``metaspot``,
     ``meta-domain`` and ``in_nucleus``. Returns one row per MetaSpot with the
-    final, validated and exploratory labels, per-structure scores and q-values,
+    final, validated and exploratory labels, the support level of each final
+    label, per-structure scores and q-values,
     plus a JSON-serializable report. The final labels place all structures in
     every cell and are not gated by validation; the report lists which
     structures held-out markers support.
@@ -727,6 +728,16 @@ def run_evidence_annotation(
     report["unsupported_structures"] = [
         name for name in FINE_STRUCTURES if name not in report["supported_structures"]
     ]
+    # How far each final label can be trusted, so downstream code does not have
+    # to read the report: broad labels come from the nuclear segmentation, fine
+    # labels are either validated on held-out markers or placed by reference only.
+    result["subcellular_annotation_support"] = np.where(
+        np.isin(complete, list(BROAD_LABEL.values())),
+        "segmentation",
+        np.where(
+            np.isin(complete, report["supported_structures"]), "validated", "unvalidated"
+        ),
+    )
     report["label_metaspot_fraction"] = {
         str(k): float(v)
         for k, v in pd.Series(complete).value_counts(normalize=True).items()
