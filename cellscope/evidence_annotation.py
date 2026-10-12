@@ -562,15 +562,27 @@ def _choose_labels(
     return labels
 
 
-def _seat_structures(scores: np.ndarray, cells: np.ndarray) -> np.ndarray:
+# A supported structure also takes every unit scoring at least this many
+# within-cell standard deviations above the cell's mean. On held-out markers 1.0
+# roughly doubles the labelled area for a small loss of enrichment; 0.5 loses
+# clearly more.
+_EXTEND_Z = 1.0
+
+
+def _seat_structures(
+    scores: np.ndarray, cells: np.ndarray, extend: Sequence[int] = ()
+) -> np.ndarray:
     """Give every structure its best-scoring unit in every cell.
 
     ``scores`` is units x structures. Returns the structure index per unit, or
     -1. Cells with too few units to seat every structure and keep one unit for
-    the broad label are left unseated.
+    the broad label are left unseated. Structures listed in ``extend`` (the
+    validated ones) additionally take the other units that score clearly above
+    the cell's average, so they can occupy several places in a cell.
     """
     seats = np.full(len(scores), -1)
     scored = np.flatnonzero(np.isfinite(scores).all(axis=0))  # structures without markers have no score
+    wide = np.flatnonzero(np.isin(scored, list(extend)))
     order = np.argsort(cells, kind="stable")
     bounds = np.flatnonzero(np.diff(cells[order])) + 1
     for rows in np.split(order, bounds):
@@ -584,6 +596,10 @@ def _seat_structures(scores: np.ndarray, cells: np.ndarray) -> np.ndarray:
             pick = np.flatnonzero(free)[np.argmax(local[free, j])]
             seats[rows[pick]] = scored[j]
             free[pick] = False
+        if wide.size:
+            best = wide[np.argmax(local[:, wide], axis=1)]
+            more = free & (local[np.arange(len(rows)), best] >= _EXTEND_Z)
+            seats[rows[more]] = scored[best[more]]
     return seats
 
 
@@ -689,10 +705,12 @@ def run_evidence_annotation(
             fdr = float(options["evidence_fdr"])
             primary[rows] = _choose_labels(table, structures, supported, broad, fdr)
             exploratory[rows] = _choose_labels(table, structures, suggestive, broad, fdr)
-            # Complete view: every cell shows every structure at its most likely
-            # unit, whether or not the structure passed validation.
+            # Final view: every cell shows every structure at its most likely
+            # unit; validated structures also take their other high-scoring units.
             scores = table[[f"score__{name}" for name in structures]].to_numpy(dtype=float)
-            seats = _seat_structures(scores, local_cells)
+            seats = _seat_structures(
+                scores, local_cells, [structures.index(s) for s in supported]
+            )
             seated = np.where(seats >= 0, np.asarray(structures, dtype=object)[seats], primary[rows])
             complete[rows] = seated
             for name in structures:

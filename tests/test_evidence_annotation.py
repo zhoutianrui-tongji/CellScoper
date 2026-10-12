@@ -123,3 +123,17 @@ def test_complete_labels_show_every_structure_in_every_cell():
     # Validated calls are kept wherever a unit was not needed as a seat.
     primary_er = table["subcellular_annotation_validated"] == "ER"
     assert (table.loc[primary_er, "subcellular_annotation"] != "Cytosol").all()
+
+
+def test_only_supported_structures_extend_beyond_their_seat():
+    from cellscope.evidence_annotation import _seat_structures
+
+    rng = np.random.default_rng(0)
+    cells = np.repeat(np.arange(5), 20)
+    scores = rng.normal(size=(100, 2))
+    plain = _seat_structures(scores, cells)
+    wide = _seat_structures(scores, cells, extend=[0])
+    assert (np.bincount(plain[plain >= 0], minlength=2) == 5).all()   # one seat per cell and structure
+    assert (wide == 1).sum() == 5                                     # unsupported structure stays at its seat
+    assert (wide == 0).sum() > 5                                      # supported structure takes more units
+    assert ((plain >= 0) <= (wide >= 0)).all() and (wide[plain >= 0] == plain[plain >= 0]).all()
