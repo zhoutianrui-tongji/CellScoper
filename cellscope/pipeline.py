@@ -8656,21 +8656,12 @@ def _write_output_guide(
   `unsupported_structures` lists the structures whose final labels are a best
   guess from the reference rather than a validated call.
 
-Comparing cells: a fine structure is given at least one unit per cell, so its
-share of a cell's transcripts mostly reflects how many units the cell has. Use
-the `subcellular_score__*` columns, not label shares, to compare how much of a
-structure different cells or cell types have.
-
-## Clustering and method diagnostics (when figure output is enabled)
-
-- `{intermediate_name}/metadomain_consensus_leiden_diagnostics.png`: default
-  multi-resolution, multi-seed clustering stability/occupancy audit. The
-  companion `module5_consensus_leiden_diagnostics.*` contains exact values.
-- `{intermediate_name}/module8_ca_dmgi_training.png`: default Cell-Aware Deep
-  Multiplex Graph Infomax (CA-DMGI) relation-specific expression/spatial losses
-  and learned consensus-gate trajectory. The companion
-  `module8_ca_dmgi_training_history.*` and `module8_ca_dmgi_summary.*` contain
-  exact values and graph semantics.
+Comparing cells: an unvalidated structure gets exactly one unit per cell, so
+its share of a cell's transcripts only reflects how many units the cell has.
+Shares are comparable between cells only for validated structures. The
+`subcellular_score__*` columns are relative to the cell's own RNA mixture and
+average to about zero in every cell; they rank units inside a cell and do not
+measure how much of a structure a cell has.
 """
     primary_name = os.path.basename(primary_data_product)
     optional_name = (
