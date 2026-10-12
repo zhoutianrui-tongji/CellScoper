@@ -596,9 +596,10 @@ def run_evidence_annotation(
 
     ``transcripts`` needs ``cell_id``, ``feature_name``, ``metaspot``,
     ``meta-domain`` and ``in_nucleus``. Returns one row per MetaSpot with the
-    primary, exploratory and complete labels, per-structure scores and q-values,
-    plus a JSON-serializable report. The complete labels place all structures in
-    every cell and are not gated by validation.
+    final, validated and exploratory labels, per-structure scores and q-values,
+    plus a JSON-serializable report. The final labels place all structures in
+    every cell and are not gated by validation; the report lists which
+    structures held-out markers support.
     """
     options = dict(DEFAULTS)
     options.update({k: v for k, v in (config or {}).items() if k in DEFAULTS and v is not None})
@@ -697,13 +698,22 @@ def run_evidence_annotation(
             for name in structures:
                 result.loc[rows, f"subcellular_score__{name}"] = table[f"score__{name}"].to_numpy()
                 result.loc[rows, f"subcellular_q__{name}"] = table[f"q__{name}"].to_numpy()
-    result["subcellular_annotation"] = primary
+    # The final label shows all seven structures in every cell; the validated
+    # view keeps only what held-out markers support in this dataset.
+    result["subcellular_annotation"] = complete
+    result["subcellular_annotation_validated"] = primary
     result["subcellular_annotation_exploratory"] = exploratory
-    result["subcellular_annotation_complete"] = complete
     report["supported_structures"] = [
         name for name, entry in report["structures"].items() if entry.get("supported")
     ]
+    report["unsupported_structures"] = [
+        name for name in FINE_STRUCTURES if name not in report["supported_structures"]
+    ]
     report["label_metaspot_fraction"] = {
+        str(k): float(v)
+        for k, v in pd.Series(complete).value_counts(normalize=True).items()
+    }
+    report["validated_label_metaspot_fraction"] = {
         str(k): float(v)
         for k, v in pd.Series(primary).value_counts(normalize=True).items()
     }

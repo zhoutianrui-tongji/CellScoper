@@ -8633,17 +8633,20 @@ def _write_output_guide(
         annotation_section = f"""
 ## Subcellular annotation
 
-- `subcellular_annotation`: structures that passed the built-in held-out marker
-  validation in this dataset; everything else is `Nucleus` or `Cytosol`.
-- `subcellular_annotation_exploratory`: the same with a relaxed validation
+- `subcellular_annotation`: the final label. Inside each cell every one of the
+  seven structures is placed on its best-scoring unit, so nearly every cell
+  shows all seven. It is not gated by validation.
+- `subcellular_annotation_validated`: only structures that passed the built-in
+  held-out marker validation in this dataset; everything else is `Nucleus` or
+  `Cytosol`. Use it for claims that a structure is really there.
+- `subcellular_annotation_exploratory`: the validated view with a relaxed
   threshold.
-- `subcellular_annotation_complete`: every structure placed on its
-  best-scoring unit inside each cell, independent of validation.
 - `subcellular_score__*` / `subcellular_q__*`: per-structure score and q-value
   of each MetaSpot.
 - `evidence_annotation_report.json`: per-structure held-out enrichment with
-  confidence interval, the level used, and whether it is supported. Read it
-  before interpreting the complete column.
+  confidence interval, the level used, and whether it is supported.
+  `unsupported_structures` lists the structures whose final labels are a best
+  guess from the reference rather than a validated call.
 
 ## Clustering and method diagnostics (when figure output is enabled)
 
@@ -11000,7 +11003,7 @@ def _annotate_with_evidence(
     )
     domain_key = spot_domain + "|" + table["subcellular_broad_compartment"].astype(str)
     table["subcellular_annotation_domain"] = (
-        table["subcellular_annotation"]
+        table["subcellular_annotation_validated"]
         .groupby(domain_key.to_numpy())
         .transform(lambda labels: labels.value_counts().index[0])
     )
@@ -11037,9 +11040,11 @@ def _annotate_with_evidence(
         )
     resolution = report["resolution"]
     log.info(
-        "Evidence annotation | resolution_spearman=%s | supported=%s",
+        "Evidence annotation | resolution_spearman=%s | supported=%s | "
+        "placed without held-out support=%s",
         resolution.get("split_half_spearman"),
         report["supported_structures"] or "none",
+        report["unsupported_structures"] or "none",
     )
     for name, entry in report["structures"].items():
         level = entry.get("level")

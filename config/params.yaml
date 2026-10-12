@@ -670,9 +670,9 @@ annotation:
   # 注释方法：evidence（唯一的方法；设为 none 可跳过注释）
   # 按细胞内混合期望给每个单位打分，用细胞内置换做零分布，并内置留出标志基因
   # 检验。输出三列：
-  #   subcellular_annotation              只含在本数据上通过检验的结构
+  #   subcellular_annotation              最终标签：每个细胞内每类结构取得分最高的区块，七类齐全
+  #   subcellular_annotation_validated    只含在本数据上通过留出基因检验的结构
   #   subcellular_annotation_exploratory  检验标准放宽一档
-  #   subcellular_annotation_complete     每个细胞内每类结构取得分最高的区块
   method: evidence
 
   # marker：只统计参考标志基因；propagated：按与标志基因的细胞内共定位

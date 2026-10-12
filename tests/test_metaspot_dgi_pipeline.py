@@ -831,7 +831,7 @@ class MetaSpotDGIPipelineTests(unittest.TestCase):
             with open(guide, encoding="utf-8") as handle:
                 text = handle.read()
             self.assertIn("Primary data products", text)
-            self.assertIn("subcellular_annotation_complete", text)
+            self.assertIn("subcellular_annotation_validated", text)
             self.assertIn("evidence_annotation_report.json", text)
             self.assertNotIn("rapx", text.lower())
             self.assertIn("module8_ca_dmgi_training_history", text)

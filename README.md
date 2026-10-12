@@ -179,10 +179,11 @@ remaining 100k-cell validation gates.
 ## Outputs
 
 - `adata1.h5ad`: final MetaSpot-level object. Annotation columns in `obs`:
-  `subcellular_annotation` (structures that passed held-out validation in this
-  dataset, otherwise `Nucleus`/`Cytosol`), `subcellular_annotation_exploratory`
-  (relaxed validation), `subcellular_annotation_complete` (all seven structures
-  placed in every cell, not gated by validation), the MetaDomain summary
+  `subcellular_annotation` (the final label: all seven structures placed in
+  every cell at their best-scoring unit, not gated by validation),
+  `subcellular_annotation_validated` (only structures that passed held-out
+  validation in this dataset, otherwise `Nucleus`/`Cytosol`),
+  `subcellular_annotation_exploratory` (relaxed validation), the MetaDomain summary
   `subcellular_annotation_domain`, and per-structure `subcellular_score__*` /
   `subcellular_q__*`. With `io.drop_embeddings: true`, the final file retains
   only the canonical `X_dgi_gcn_metaspot` representation plus annotation

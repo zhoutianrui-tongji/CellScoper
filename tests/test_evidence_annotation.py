@@ -74,14 +74,14 @@ def test_planted_structure_is_supported_and_unstructured_markers_are_not():
     assert report["supported_structures"] == ["ER"]
 
     truth = frame.groupby("metaspot")["planted"].first().reindex(table["metaspot"]).to_numpy()
-    called = table["subcellular_annotation"].to_numpy() == "ER"
+    called = table["subcellular_annotation_validated"].to_numpy() == "ER"
     assert called.sum() > 0
     assert truth[called].mean() > 0.9                    # precision
     assert called[truth].mean() > 0.5                    # recall
     # Nuclear units never receive cytoplasmic structures.
     nuclear = table["subcellular_broad_compartment"].to_numpy() == "Nucleus"
-    assert set(table.loc[nuclear, "subcellular_annotation"]) == {"Nucleus"}
-    assert "OMM" not in set(table["subcellular_annotation"])
+    assert set(table.loc[nuclear, "subcellular_annotation_validated"]) == {"Nucleus"}
+    assert "OMM" not in set(table["subcellular_annotation_validated"])
 
 
 def test_propagation_uses_genes_outside_the_reference():
@@ -107,19 +107,19 @@ def test_resolution_gate_reports_broad_labels_when_positions_carry_no_signal():
     table, report = run_evidence_annotation(frame, reference, FAST)
     assert not report["resolution"]["passed"]
     assert report["supported_structures"] == []
-    assert set(table["subcellular_annotation"]) == {"Nucleus", "Cytosol"}
+    assert set(table["subcellular_annotation_validated"]) == {"Nucleus", "Cytosol"}
 
 
 def test_complete_labels_show_every_structure_in_every_cell():
     frame, reference = _synthetic()
     table, _ = run_evidence_annotation(frame, reference, FAST)
     cell = frame.drop_duplicates("metaspot").set_index("metaspot")["cell_id"].reindex(table["metaspot"])
-    per_cell = table.groupby(cell.to_numpy())["subcellular_annotation_complete"].agg(set)
+    per_cell = table.groupby(cell.to_numpy())["subcellular_annotation"].agg(set)
     units = table.groupby(cell.to_numpy()).size()
     assert (per_cell[units >= 12].map(len) == 7).all()
     # Seating never crosses the nuclear boundary.
     nuclear = table["subcellular_broad_compartment"].to_numpy() == "Nucleus"
-    assert not set(table.loc[nuclear, "subcellular_annotation_complete"]) & {"Cytosol", "ER", "OMM"}
+    assert not set(table.loc[nuclear, "subcellular_annotation"]) & {"Cytosol", "ER", "OMM"}
     # Validated calls are kept wherever a unit was not needed as a seat.
-    primary_er = table["subcellular_annotation"] == "ER"
-    assert (table.loc[primary_er, "subcellular_annotation_complete"] != "Cytosol").all()
+    primary_er = table["subcellular_annotation_validated"] == "ER"
+    assert (table.loc[primary_er, "subcellular_annotation"] != "Cytosol").all()

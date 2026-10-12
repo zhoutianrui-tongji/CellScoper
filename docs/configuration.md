@@ -58,19 +58,24 @@ what the owning cell's RNA mixture predicts, tests the excess against copies
 of the data with gene identities shuffled within cells, and then validates each structure by holding marker
 genes out (every gene exactly once) and asking whether they land in the
 labelled regions: the typical held-out marker gene must be more enriched there
-than the typical other gene. Only structures that pass in the current dataset,
-after adjusting for all structure/level combinations, are written to
-`subcellular_annotation`. Structures passing only without that adjustment are
-added in `subcellular_annotation_exploratory`. Every structure keeps its
-`subcellular_score__*` / `subcellular_q__*` columns. The full result is saved
-as `evidence_annotation_report.json`.
+than the typical other gene.
 
-`subcellular_annotation_complete` is a third view for analyses that need all
-seven structures in every cell: inside each cell, every structure is placed on
-the unit with its highest score (never across the nuclear boundary), and the
-remaining units keep their `subcellular_annotation` label. It is not gated by
-validation, so read it together with the report, which states for each
-structure whether held-out marker genes support it in this dataset.
+Three label columns are written:
+
+- `subcellular_annotation` is the final label. Inside each cell, every
+  structure is placed on the unit with its highest score (never across the
+  nuclear boundary), so nearly every cell shows all seven structures. It is not
+  gated by validation.
+- `subcellular_annotation_validated` keeps only structures that pass the
+  held-out check in the current dataset, after adjusting for all
+  structure/level combinations; other units are `Nucleus` or `Cytosol`.
+- `subcellular_annotation_exploratory` adds structures passing without that
+  adjustment.
+
+Every structure keeps its `subcellular_score__*` / `subcellular_q__*` columns.
+`evidence_annotation_report.json` states for each structure whether held-out
+marker genes support it; `unsupported_structures` lists those whose final
+labels are a best guess from the reference.
 
 - `evidence_score` (`marker|propagated`): count reference markers only, or
   weight every gene by its within-cell co-localization with them. Default:
