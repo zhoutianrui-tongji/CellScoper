@@ -241,7 +241,7 @@ io:
   final_format: csv
 ```
 
-Finer MetaSpots (as in `config/params.atera_brca.yaml`):
+Finer MetaSpots (about 6 transcript sites per MetaSpot instead of 15):
 ```yaml
 module3:
   target_sites_per_metaspot: 6

@@ -7,7 +7,6 @@ readme = (here / "README.md").read_text(encoding="utf-8") if (here / "README.md"
 
 _BUNDLED_FILES = (
 	(here / "config" / "params.yaml", "params.yaml"),
-	(here / "config" / "params.atera_brca.yaml", "params.atera_brca.yaml"),
 	(here / "src" / "2019_CELL_APEXSeq.tsv", "2019_CELL_APEXSeq.tsv"),
 	(here / "src" / "RNALocateV3.txt", "RNALocateV3.txt"),
 	(here / "src" / "extra_reference_markers.tsv", "extra_reference_markers.tsv"),

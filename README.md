@@ -7,6 +7,12 @@ with built-in validation, and reports per-cell structure amounts. It takes trans
 segmentation and has been run on 10x Xenium, Atera, CosMx and a HEK293T Xenium panel. The repository provides a CLI and
 a modular pipeline with resume and lightweight checkpoints.
 
+![CellScoper overview](docs/cellscoper_overview.png)
+
+From transcripts and segmentation masks to MetaSpots (a), label-free MetaSpot representations (b), reference-guided
+structure labels and reference-free MetaDomains (c), and the cell × structure table (d). All cells and plots are
+schematic; organelle illustrations adapted from Servier Medical Art (CC BY 3.0).
+
 With the packaged `config/params.yaml` the pipeline runs these steps:
 
 1. **Preprocessing** keeps cells present in all three input tables and removes transcripts whose gene the cell's type
@@ -101,8 +107,6 @@ cellscoper \
 ```
 
 `--config` files only need the keys they change; the packaged defaults are the configuration of the v1.0.0 results.
-`config/params.atera_brca.yaml` is an earlier option with finer MetaSpots (6 transcript sites per MetaSpot); the
-v1.0.0 results use the default 15.
 
 ## Inputs
 

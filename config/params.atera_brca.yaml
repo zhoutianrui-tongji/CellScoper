@@ -1,8 +1,0 @@
-# Atera Human BRCA (whole transcriptome): finer MetaSpots than the default 15.
-# Held-out marker enrichment of ER, OMM and Nuclear Speckle labels was higher at 8
-# than at 15 or 30 on all three marker splits tested (2026-10-13).
-# MetaSpots are 3D (module3.use_z_location, default true). 3D merges more fragments,
-# so 6 sites give about as many MetaSpots as 8 did in 2D; against 2D-8 on 5k cells it
-# raised every structure's held-out MetaDomain AUROC (OMM .518 -> .525) (2026-10-21).
-module3:
-  target_sites_per_metaspot: 6
