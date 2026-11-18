@@ -118,8 +118,7 @@ def read_spatial_transcripts(path: str) -> pd.DataFrame:
 def _read_csv(path: str, usecols, dtype) -> pd.DataFrame:
     """``pd.read_csv`` with the multithreaded pyarrow parser when it is available.
 
-    Same values as the default parser (Atera 5k, 14M rows: 1.3 s vs 8.4 s; Xenium
-    COAD's 294M rows took 11 min single-threaded). Categories are put back in the
+    Same values as the default parser, several times faster on large tables. Categories are put back in the
     sorted order the default parser gives, so category codes match too.
     """
     try:

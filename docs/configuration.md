@@ -107,7 +107,7 @@ plus positions) and up to 32 nearby transcripts of the same cell side, and outpu
 MetaSpot's genes and predicts them against the cell side's own composition, so z describes where the MetaSpot departs
 from its cell side; genes still visible in the input are excluded from the answer. 10% of cells are held out for early
 stopping. z is centred per cell side. A CUDA GPU is used when available (the one with the most free memory).
-- `lens_max_epochs` (200): maximum epochs (Atera 5k stops after about 70-80).
+- `lens_max_epochs` (200): maximum epochs; early stopping usually ends training well before.
 - `lens_spots_per_epoch` (0): > 0 trains each epoch on that many random MetaSpots, so training time does not grow with
   the data (use for full-size datasets); early stopping then counts MetaSpots seen.
 - `lens_null_cells` (10,000): after training, cells with gene identities shuffled within each cell side are encoded once;
@@ -121,8 +121,7 @@ stopping. z is centred per cell side. A CUDA GPU is used when available (the one
   simulations; without it, only the nucleus/cytoplasm flag and positions relative to the MetaSpot are used.
 
 ### MetaDomains
-MetaDomains are structure types found from LENS without reference genes (`cellscoper/metadomain_discovery.py`; until
-2026-11-03 they were 25 MiniBatchKMeans clusters per side). `random_seed` (42) seeds LENS and the discovery.
+MetaDomains are structure types found from LENS without reference genes (`cellscoper/metadomain_discovery.py`). `random_seed` (42) seeds LENS and the discovery.
 1. z is smoothed over about 50 transcripts of neighbouring MetaSpots of the same cell side and whitened by the null's
    covariance (`lens_null_cells`).
 2. MetaSpots whose whitened norm beats the null at false share `metadomain_q` (0.2) are detected, with
@@ -131,21 +130,19 @@ MetaDomains are structure types found from LENS without reference genes (`cellsc
    from each side) gives candidate directions; the number comes from the data.
 4. A candidate is kept when both random halves of the cells find it (mutual best, cosine >= 0.8).
 5. Steps 3-4 are repeated 5 times with different samples and cell halves; directions kept in at least 3 of the 5
-   restarts (grouped at cosine >= 0.8) become MetaDomains. A single restart depends on its sample: on Atera 5k the same z
-   gave 0-4 MetaDomains across discovery seeds; with the restarts, both LENS seeds and three discovery seeds each gave
-   the same 4 MetaDomains (decoder profile r >= .999 for the same z, .87-.94 between LENS seeds; about 80 s).
+   restarts (grouped at cosine >= 0.8) become MetaDomains. A single restart depends on its sample; the restarts make
+   the result stable across seeds.
 6. Every kept direction becomes an axis with its own null threshold; a MetaSpot takes the MetaDomain whose threshold it
    exceeds most, else stays background (-1).
 
-Nucleus and cytoplasm are clustered together: clustered per side, Atera 5k gave mirror MetaDomains on both sides of the
+Nucleus and cytoplasm are clustered together: clustered per side, the same region appears as mirror MetaDomains on both sides of the
 2D nucleus outline, where RNA composition hardly changes. A nucleus-boundary check flags a MetaDomain whose genes follow
 the raw nucleus-cytoplasm contrast (|r| >= 0.5) while >= 20% of its MetaSpots lie on the other side of the outline; it
 reflects the outline (2D projection, segmentation) or a perinuclear gradient.
 
 Results: `adata1.obs["meta-domain"]` (-1 = background) and `"meta-domain_score"`, the `meta-domain` column of
 `final_data`, `adata2` (one row per MetaDomain and one for the background), and `adata1.uns["metadomain_discovery"]` (side, nucleus share, size, reproducibility, support over restarts, null share,
-nucleus-boundary check, decoder gene profiles and top genes). Gene-shuffled input gives no MetaDomain on Atera, HEK and
-CosMx; MetaDomains found with separately trained models matched for 78-84% (Atera) and 100% (HEK) of their MetaSpots.
+nucleus-boundary check, decoder gene profiles and top genes). Gene-shuffled input gives no MetaDomain.
 
 ## module6 (MetaDomain AnnData)
 - `h5ad_compression_override` (bool): apply `io.h5ad_compression` to `adata2`. Default: `true`.
@@ -170,9 +167,7 @@ direction, averaged over about `evidence_axis_smooth_transcripts` (50) transcrip
 side. Gene identities are shuffled within cell sides and the score is recomputed; a structure takes the MetaSpots above
 the lowest score where the null's share above it is at most `evidence_axis_q` (0.2) times the real share. A structure
 that never reaches this gets no MetaSpot. `evidence_axis_source` (`auto|ge|lens|ge+lens`; `auto` = ge+lens when LENS
-ran) picks the read-out. Same-area held-out marker enrichment (OR at 5% area): Atera 1k 1.53 vs 1.29 with the earlier
-count-based rule, HEK 1.22 vs 1.16, CosMx 1.21 vs 0.99, Atera 5k 1.67 vs 1.42; on gene-shuffled input it labels 0-0.9%
-of MetaSpots against 3.8-10.5%.
+ran) picks the read-out.
 
 Label columns: `subcellular_annotation` (final label), `subcellular_annotation_support` (`segmentation`, `validated`,
 `unvalidated`), `subcellular_annotation_validated` (only structures that passed the held-out check),
@@ -212,11 +207,7 @@ cell side and structure label (and MetaDomain) with
   weighted by each gene's non-negative loading on the structure's GE direction (MetaDomains: the positive part of their
   decoder profile), over the expectation with gene names shuffled in the cell side. The ratio has no depth bias in
   expectation but is noisy per cell; compare groups with `pooled_concentration` (sum `pair_obs` / sum `pair_exp`). It
-  measures arrangement: a structure that fills the cell (ER in plasma cells, Atera 5k) has a large share and a ratio
-  near 1.
-
-Atera 5k: 38 s with 32 jobs for 5000 cells; depth-matched ER share was higher in plasma cells than in T cells
-(+0.098, 95% CI 0.061-0.144).
+  measures arrangement: a structure that fills the cell has a large share and a ratio near 1.
 
 ## runtime (parallelism)
 - `n_jobs` (int): worker count for parallel sections (`CELLSCOPER_N_JOBS` overrides).

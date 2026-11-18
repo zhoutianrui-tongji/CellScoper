@@ -536,7 +536,6 @@ def per_cell_clustering(
     features (the ``n_segmentation_features`` with the largest variance), with about one MetaSpot per
     ``target_sites_per_metaspot`` distinct x-y sites (bounded by ``min/max_metaspots_per_cell``); in 3D when
     ``use_z_location`` and z is present. Cell sides with fewer than ``min_segment_points`` transcripts form one MetaSpot.
-    Until 2026-11-03 an HDBSCAN / KMeans path without spatial connectivity was also available.
     """
     MIN_SUB_PTS = int(min_segment_points)
     if not isinstance(target_sites_per_metaspot, (int, float)) or int(target_sites_per_metaspot) < 1:
@@ -598,7 +597,7 @@ def per_cell_clustering(
     # comp arrays.
     geom_cols = [c for c in gmm_cols if c in ('x_location', 'y_location', 'r_signed', 'd_cell_norm', 'd_nuc_norm', 'sin_theta', 'cos_theta', 'sin2_theta', 'cos2_theta', 'local_density')]
     comp_cols = [c for c in gmm_cols if c not in geom_cols]
-    # isotropic（2026-11-09）：分割只用局部基因组成 + 局部密度；空间紧致性只来自 x-y(-z) 坐标，各方向等权，
+    # isotropic：分割只用局部基因组成 + 局部密度；空间紧致性只来自 x-y(-z) 坐标，各方向等权，
     # 坐标所占方差份额 = segmentation_spatial_share。legacy 另含径向距离（r_signed、d_nuc_norm、d_cell_norm，
     # 胞质中三者相关 |r| ≥ 0.995）与绕核夹角（sin/cos θ、2θ），使 MetaSpot 沿绕核方向拉长。
     if segmentation_geometry not in ("legacy", "isotropic"):

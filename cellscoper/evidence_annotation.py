@@ -9,9 +9,6 @@ This module contains no pipeline I/O. It answers three questions in order:
    (``structure_axes.annotate``).
 3. Do marker genes the annotation never saw land in the labelled regions? (held-out validation, reported; the
    ``validated`` view keeps only supported structures)
-
-Until 2026-11-03 a count-based rule with per-cell seats and MetaDomain borrowing (``evidence_label_rule: legacy``) was
-also available; on gene-shuffled input it gave 3.8-10.5% false labels against 0-0.9% for the axis rule.
 """
 
 from __future__ import annotations

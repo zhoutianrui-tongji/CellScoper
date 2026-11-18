@@ -6,7 +6,7 @@ The number of MetaDomains comes from the data: only density modes of real MetaSp
 MetaSpots that do not clearly belong to one stay background. Reference markers are not used here; they name MetaDomains
 afterwards through the decoder (``domain_gene_profiles``).
 
-Nucleus and cytoplasm MetaSpots are clustered together (``split_sides=True``: each side alone, the 2026-11-02 version):
+Nucleus and cytoplasm MetaSpots are clustered together (``split_sides=True`` clusters each side alone):
   1 smooth z over neighbouring MetaSpots of the same cell side (as the structure axes), real and null alike
   2 whiten by the null covariance: variation the shuffled cells also show (positions, depth, noise) is down-weighted
   3 detect MetaSpots whose whitened norm exceeds the null at false share ``q``; thresholds per stratum = side x depth
@@ -20,23 +20,13 @@ Nucleus and cytoplasm MetaSpots are clustered together (``split_sides=True``: ea
     direction with cosine >= ``min_repro``
   7 consensus over restarts: steps 4 and 6 are repeated ``n_restarts`` times with different samples and cell halves; the
     directions kept in each restart are grouped (cosine >= ``min_repro``), and a group kept in at least half of the restarts
-    becomes one MetaDomain (mean direction). One restart depends on its 20k-MetaSpot sample: on Atera 5k (2026-11-03) the
-    same z gave 0-4 MetaDomains across five seeds, while the 4 found when it worked were the same with both LENS seeds
-    (decoder profile r .87-.94; scripts/mdd_seed_diag.py)
+    becomes one MetaDomain (mean direction). A single restart depends on its sample, so only directions found
+    repeatedly are kept.
 
-Why together (2026-11-03): z is relative to each cell side, and the nucleus flag comes from a 2D outline. Clustered per
-side, Atera 5k gave mirror pairs across the outline (nuclear-edge MetaDomain with cytoplasm-like genes, r = .93 with the
-peripheral cytoplasm one; perinuclear cytoplasm MetaDomains with nuclear-like genes, r = .70-.79 with the nuclear interior
-one), and in the raw data RNA composition hardly differs across the outline (within-cell AUC of the nucleus flag .51-.60
-next to it) while transcripts at the top and bottom of the outline look cytoplasmic (scripts/nucleus_gene_info.py).
+Why together: z is relative to each cell side, and the nucleus flag comes from a 2D outline. Clustered per side, the same
+RNA region appears as mirror pairs on both sides of the outline, because RNA composition hardly changes across it.
 ``nucleus_boundary_check`` reports, per MetaDomain, how far its genes follow the nucleus-cytoplasm contrast of the raw
-data and how many of its MetaSpots lie on the opposite side of the outline.
-
-Atera BRCA 1k (2026-11-02, scripts metadomain_discovery.py / mdd_compare.py, prototype of this module): gene-shuffled
-input gives no MetaDomain; 3-6 nuclear and 2-9 cytoplasmic MetaDomains per run; matched between runs with separately
-trained models for 76-83% of the clustered MetaSpots (KMeans 25 per side: 20-26%); without markers, the MetaDomain whose
-decoder profile ranks the reference markers highest holds held-out ER genes at OR 1.92 (KMeans 1.42) and Speckle genes at
-1.66 (1.45).
+data and how many of its MetaSpots lie on the opposite side of the outline. Gene-shuffled input gives no MetaDomain.
 """
 from __future__ import annotations
 
@@ -339,8 +329,7 @@ def domain_gene_profiles(zs: np.ndarray, domain: np.ndarray, gene_loadings: np.n
     """Decoder profile of each MetaDomain: W @ mean smoothed z of its members (log-odds of each gene against the cell side).
 
     With ``unit_rows`` every gene's decoder row is scaled to length 1, so genes rank by how well their row aligns with the
-    MetaDomain, not by the size of their loadings (Atera 5k: with raw rows, immunoglobulin genes with large loadings topped
-    cytoplasmic MetaDomains whose MetaSpots in non-plasma cells hold almost no immunoglobulin transcripts)."""
+    MetaDomain, not by the size of their loadings (with raw rows, a few genes with very large loadings top every list)."""
     W = np.asarray(gene_loadings, np.float64)
     if unit_rows:
         W = W / np.maximum(np.linalg.norm(W, axis=1, keepdims=True), 1e-12)

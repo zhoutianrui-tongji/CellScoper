@@ -55,7 +55,7 @@ def run_module5_simple(
     MetaDomains (``meta-domain``) are found from LENS without reference genes (metadomain_discovery.py): directions of
     z that real MetaSpots take far more often than gene-shuffled cells, found by density (HDBSCAN, nucleus and cytoplasm
     together) and kept when both halves of the cells show them; their number comes from the data. MetaSpots outside
-    every MetaDomain are background (``-1``). Until 2026-11-03 MetaDomains were 25 MiniBatchKMeans clusters per side.
+    every MetaDomain are background (``-1``).
     """
     import time as _time
 

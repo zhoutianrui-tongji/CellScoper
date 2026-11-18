@@ -175,7 +175,7 @@ share of a structure is its amount, judged by the same threshold in every cell;
 it rises with transcript depth, so compare cell types at matched depth. The
 pair co-localisation ratio measures how concentrated the structure's RNA is
 inside the cell, has no depth bias, and does not rise when a structure fills
-the cell (Atera 5k: plasma cells, ER). The `subcellular_score__*` columns are
+the cell. The `subcellular_score__*` columns are
 relative to the cell's own RNA mixture.
 """
     primary_name = os.path.basename(primary_data_product)

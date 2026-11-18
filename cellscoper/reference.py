@@ -29,7 +29,7 @@ _MULTI_SEP = _re.compile(r'[;,/|]+')
 def _norm_loc_txt(s: str) -> str:
     return _re.sub(r'\s+', ' ', str(s).strip().lower())
 
-# Explicit mapping (subset from user-provided list; extended as needed)
+# Explicit mapping of RNALocate localisation names to compartments
 L1_EXPLICIT = {
     'nucleolus': 'NUCLEOLUS',
     'nucleus(exclusion from nucleoli)': 'NUCLEUS', 'nucleus': 'NUCLEUS', 'nuclear ': 'NUCLEUS', 'nucleoplasm': 'NUCLEUS',
@@ -422,8 +422,8 @@ def _load_reference_scores(
 ) -> pd.DataFrame:
     """Gene x compartment reference scores, indexed by upper-case symbol.
 
-    Uses the same sources and hold-out option as RAP-X: a user table when
-    given, otherwise bundled APEX-seq merged with RNALocate.
+    A table passed with ``--gold-data`` when given, otherwise the bundled
+    APEX-seq table merged with RNALocate.
     """
     if gold_data is not None:
         table = (
@@ -440,7 +440,7 @@ def _load_reference_scores(
         if "Common_Gene" not in table.columns:
             raise ValueError("gold_data must contain a 'Common_Gene' column")
         reference = merge_gold(table, table.iloc[0:0], fuse="max")
-        # Same per-gene 0-1 scaling RAP-X applies to a user table.
+        # Scale each gene to 0-1 across compartments.
         reference = reference.sub(reference.min(axis=1), axis=0)
         reference = reference.div(reference.max(axis=1).replace(0, 1.0), axis=0)
     else:

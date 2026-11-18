@@ -7,7 +7,7 @@ records which genes sit together inside cells, not which genes cells of one type
 1. Gate. Reference markers are split into GATE_FOLDS parts; W projected on the direction of 4/5 of them must rank the held-out
    fifth above non-reference genes (AUROC). The same is done for GATE_NULL_SETS random gene sets matched to the markers by
    expression decile; the structure is labelled only if z = (AUROC - null mean) / null SD >= GATE_Z. Genes shuffled within
-   cells give z ~ 0 (Atera 5k -3.6..0.5; real input 7-29).
+   cells give z near 0.
 2. Amount. Gene weight = W projected on the marker direction, divided by the WEIGHT_CAP_QUANTILE quantile of the markers'
    values and clipped to [0, 1]. A MetaSpot's evidence = mean weight of its transcripts, not centred per cell. One Otsu
    threshold per structure over all MetaSpots of its side; above it the MetaSpot counts for the structure (several: the
@@ -15,10 +15,6 @@ records which genes sit together inside cells, not which genes cells of one type
 3. Place. Within each cell side, MetaSpots are ranked by the mean of two percentile ranks, the evidence and the structure-axis
    score (annotation scores; evidence only when a structure has none), and each structure takes MetaSpots from the top until
    its quota is filled; a MetaSpot goes to the structure for which it lies earliest in its quota.
-
-Simulations (2026-11-17): cell-level label share vs truth r = .97-.99 for ER (locked axis labels -.58 to -.89), F1 ER
-.70-.82 (axis .31-.49). Atera 5k leave-genes-out: within-cell AUROC equal to the axis labels (ER .552 vs .553). See
-intermediate/lens_own_20261117/README.md.
 """
 from __future__ import annotations
 

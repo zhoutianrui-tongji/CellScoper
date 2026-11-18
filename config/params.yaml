@@ -17,7 +17,7 @@
 # ============================================================
 
 io:
-  # 默认打开（2026-11-03 用户批准；关闭设 false）：输出"细胞 × 结构"特征表 cell_structure_features.parquet
+  # 默认打开（关闭设 false）：输出"细胞 × 结构"特征表 cell_structure_features.parquet
   # （cellscoper/cell_features.py: structure_feature_table；需要注释）。每个细胞每一侧、每种结构和每个 MetaDomain 一行：带标签的 MetaSpot / 转录本比例，以及没有深度偏差的成对共定位比值（单细胞噪声大，
   # 比较细胞群体时用 sum(pair_obs) / sum(pair_exp)）。
   cell_structure_features: true
@@ -224,8 +224,7 @@ module3:
 
 module5:
   # ---- MetaSpot 表示：空间基因嵌入（GE，X_gene_embedding）和 LENS（MetaSpot 掩码转录本模型，X_lens）----
-  # 注释（结构轴）同时读 GE 和 LENS；MetaDomain 只用 LENS。2026-11-02 起不再训练 CA-DMGI（三个平台上 LENS 不差于
-  # CA-DMGI，显存约 4.4 GB vs 22 GB），2026-11-03 删除其代码，同时删除只用于 KMeans MetaDomain 的 GE + LENS 拼接表示。
+  # 注释同时读 GE 和 LENS；MetaDomain 只用 LENS。
   # LENS 最多训练轮数；按留出细胞的预测提升提前停止（5k 约 70–80 轮停止）。需要 GPU（无 GPU 时用 CPU，很慢）。
   lens_max_epochs: 200
   # LENS 抽样训练：每轮只训练这么多个随机 MetaSpot，训练时间不随数据量增长（全数据用）；0 = 每轮用全部 MetaSpot。
@@ -239,7 +238,7 @@ module5:
   # 默认 own（v1.0.0 起）。
   lens_background: own
   # LENS 每条转录本是否输入它在细胞里的绝对径向位置（到核、到细胞膜的相对距离）。false = 只留核/质标记和相对 MetaSpot 的位置。
-  # 本细胞背景（own）下径向位置会占满 z、盖过周围基因的信息（模拟：焦点 A/B 有 .642、无 .711）；Atera 5k 留出标签不变。
+  # 本细胞背景（own）下径向位置会占满 z、盖过周围基因的信息（模拟数据上）；真实数据的留出标签不变。
   # 默认 false（v1.0.0 起）。
   lens_absolute_position: false
 
@@ -248,7 +247,6 @@ module5:
   gene_embedding_pair_radius: auto
   gene_embedding_neighbour_radius: auto
   # multiscale（默认）：在 3、7、14 倍转录本平均间距三个尺度上各做一次基因嵌入后拼接，不需要选半径。
-  #   SimFISH v2（11 份）：共定位模块 F1 约 0.55 -> 0.70；Atera 2k：MetaDomain 留出 AUROC 与单尺度持平。
   # density：只用 10 倍间距。
   gene_embedding_scale: multiscale
   gene_embedding_dim: 32
@@ -262,11 +260,11 @@ module5:
   random_seed: 42
 
   # ---- MetaDomain：从 LENS 无参考发现（cellscoper/metadomain_discovery.py）----
-  # 2026-11-03 起 MetaDomain 只有这一种（取代原来每侧 25 个 KMeans 类）：从 LENS 的 z 找出比基因打乱对照更密集、
+  # 从 LENS 的 z 找出比基因打乱对照更密集、
   # 两半细胞都能重复的方向（HDBSCAN）；数量由数据决定，不属于任何 MetaDomain 的 MetaSpot 为背景（meta-domain = -1）。
   # 核内、胞质一起聚类（门槛按侧和深度分档）：分开聚类会在 2D 核轮廓两侧造出"镜像"结构域。每个 MetaDomain
   # 报告核内比例和核边界检查（adata1.uns["metadomain_discovery"]）。需要 lens_null_cells > 0。
-  # Atera 1k / HEK / CosMx：基因打乱的输入找到 0 个；不同运行之间可重复的比例 Atera 78-84%、HEK 100%（KMeans 20-45%）。
+  # 基因打乱的输入上找不到 MetaDomain。
   # 发现时允许的假阳性比例（与结构轴 evidence_axis_q 相同的含义）。
   metadomain_q: 0.2
 
@@ -300,9 +298,6 @@ annotation:
   #   subcellular_annotation_exploratory  检验标准放宽一档
   # 每个 MetaSpot 对每种结构有一个连续分数：参考标志基因只给出方向（GE 和 LENS 解码器里），分数在同一细胞侧
   # 相邻 MetaSpot 上平均；门槛来自细胞内打乱基因的空模型，按估计的假标签比例定；留出检验只报告，不改变标签。
-  # 2026-11-02 起为默认，2026-11-03 删除旧的计数规则（legacy）。相同标记面积的留基因 OR：Atera 1k 旧规则 1.29 /
-  # 结构轴 1.53，HEK 1.16 / 1.22，CosMx 0.99 / 1.21，Atera 5k 1.42 / 1.67；打乱基因的输入上旧规则有 3.8-10.5%
-  # 假标签，结构轴 0-0.9%。
   method: evidence
 
   # 结构分数从哪里读：auto（跑了 LENS 时用 ge+lens，否则 ge）、ge、lens、ge+lens。

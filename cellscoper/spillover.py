@@ -44,8 +44,8 @@ def relative_type_expression(
     )
     norm = sp.diags(1e4 / np.asarray(counts.sum(1)).ravel()) @ counts
     norm.data = np.log1p(norm.data)
-    # shortcut: cell types are a plain k-means on 30 SVD components, upgrade to
-    # user-supplied cell types if the sample has rare types k-means would merge.
+    # Cell groups: k-means on up to 30 SVD components; no external cell-type labels are needed.
+    # Rare types that k-means merges with a larger one keep their genes only if that type also expresses them.
     n_comp = max(1, min(30, len(genes) - 1, len(cells) - 1))
     embedding = TruncatedSVD(n_comp, random_state=seed).fit_transform(norm)
     cell_type = KMeans(n_types, n_init=10, random_state=seed).fit_predict(embedding)

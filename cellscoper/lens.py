@@ -15,10 +15,6 @@ label-free score. z is centred per cell side, as the spatial gene embedding is.
 
 Scale: counts are sparse and the low-rank profile is kept as NMF factors, so the GPU holds ~5 GB at full Atera
 (~170k cells); per-transcript tables move to host memory above 4 GB, and spots_per_epoch keeps training time fixed.
-
-Atera BRCA (2026-10-28, K=25 per side KMeans, within-cell AUROC of held-out gene sets): the gene embedding
-next to 0.5 x LENS was >= the gene embedding alone on all six structures on 5k cells (signal peptide .553 ->
-.567, Nucleolus .532 -> .547) and more reproducible between runs (ARI nucleus/cytoplasm .74/.42 -> .77/.52).
 """
 from __future__ import annotations
 
@@ -40,7 +36,7 @@ GPU_TABLE_MAX_BYTES = 4 * 2**30
 NMF_FIT_MAX = 20000  # cell sides; more are projected onto factors fitted on a sample of this many
 LENS_BACKGROUNDS = ("learned", "own")
 # background="own": pseudo-counts of the cell side's low-rank profile added to its own counts, so genes the cell side has not
-# shown elsewhere keep a small probability (Atera 5k / simulations 2026-11-17, intermediate/lens_own_20261117)
+# shown elsewhere keep a small probability
 OWN_BACKGROUND_PSEUDOCOUNT = 10.0
 
 
@@ -138,8 +134,7 @@ def lens_embedding(
     counts MetaSpots seen (``patience_units`` without improvement, at most ``max_units``).
 
     Genes still visible in the input (MetaSpot + context) are removed from B: every copy of a hidden gene is hidden, so
-    a visible gene is never the answer; without this, ruling out visible genes earns gain with no spatial information
-    (HEK293T 2k, 290 genes, 2026-10-30: gain .446, genes shuffled within cell side .447).
+    a visible gene is never the answer; without this, ruling out visible genes earns gain with no spatial information.
 
     ``null_cells`` > 0 also encodes up to that many random cells with gene identities shuffled within each cell side
     (positions kept), giving the null of any read-out through W: diagnostics ``null_spots`` (rows of ``metaspot_names``)
@@ -147,14 +142,12 @@ def lens_embedding(
 
     ``background`` sets B: "learned" (the mixture above) or "own" = the cell side's own counts without this MetaSpot plus
     OWN_BACKGROUND_PSEUDOCOUNT pseudo-counts of its low-rank profile, with no global part. With "own", composition that
-    differs between cells is already in B, so z and W only learn where a MetaSpot departs from its own cell (Atera 5k:
-    held-out reference genes ranked by W at AUROC .76-.84 on real input and ~.5 on genes shuffled within cells; "learned"
-    kept .83-.94 on the shuffled input).
+    differs between cells is already in B, so z and W only learn where a MetaSpot departs from its own cell; with genes
+    shuffled within cells, W no longer ranks held-out reference genes (with "learned" it still does).
 
     ``absolute_position=False`` gives every transcript the same d_nuc_norm / d_cell_norm (.5): tokens keep the nucleus flag
     and their position relative to the MetaSpot, but not where in the cell they sit. With the own background the radial
-    position otherwise dominates z (simulation, foci A vs B with identical radial profiles: .642 with, .711 without,
-    v11 .699; seven sources .753 / .740); Atera 5k leave-genes-out labels were unchanged (ER AUC .553 / .554).
+    position otherwise dominates z in simulations; held-out labels on real data are unchanged.
 
     """
     import torch
@@ -166,7 +159,7 @@ def lens_embedding(
     say = log or (lambda *_: None)
     t0 = time.time()
     dev = _resolve_device(torch, device)
-    amp = dev.type == "cuda"  # bf16 encoder: 1k 127 -> 85 s with the same held-out gain and AUROC (2026-10-28)
+    amp = dev.type == "cuda"  # bf16 encoder: ~1.5x faster, same held-out gain
     torch.manual_seed(seed)
     if dev.type == "cuda":
         torch.cuda.manual_seed_all(seed)
@@ -216,7 +209,7 @@ def lens_embedding(
     say(f"LENS: {n_rows} transcripts, {S} MetaSpots, vocabulary {V} genes, device {dev}")
 
     # MetaSpot x MAX_LEN transcript index; larger MetaSpots keep a random subset
-    # shortcut: MetaSpots above 32 transcripts (~6% on Atera 1k) are represented by a random subset; pool chunks if that matters
+    # MetaSpots with more than 32 transcripts (a few percent) are represented by a random subset of 32
     shuffled = np.lexsort((rng.random(n_rows), local))
     rank = np.arange(n_rows) - starts[local[shuffled]]
     keep = rank < MAX_LEN
@@ -282,8 +275,8 @@ def lens_embedding(
     model = LENS().to(dev)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr, weight_decay=1e-4)
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a)).to(dev)
-    # per-transcript and per-MetaSpot tables: on the GPU when small (Atera 5k ~1 GB), else in host memory and each
-    # batch copies its rows over (full Atera ~45 GB; host batches cost ~30% more time per epoch on Atera 1k)
+    # per-transcript and per-MetaSpot tables: on the GPU when small, else in host memory and each batch copies its rows
+    # over (slower per epoch, but whole sections fit)
     table_bytes = idx.nbytes * 2 + n_rows * (8 + 4 * (3 + n_pos_columns)) + S * 24
     tab_dev = dev if table_bytes <= GPU_TABLE_MAX_BYTES else torch.device("cpu")
     H = lambda a: torch.from_numpy(np.ascontiguousarray(a)).to(tab_dev)
@@ -373,7 +366,7 @@ def lens_embedding(
     if spots_per_epoch:
         val_spots = np.sort(np.random.default_rng(1).choice(
             val_spots, min(len(val_spots), max(100_000, int(spots_per_epoch) // 5)), replace=False))
-        # stopping counted in MetaSpots seen: 5 sampled epochs of 200k stopped Atera 1k too early (Nucleolus .529 -> .508)
+        # stopping counted in MetaSpots seen: a fixed number of small sampled epochs stops too early
         patience = max(int(patience), int(np.ceil(patience_units / int(spots_per_epoch))))
         max_epochs = max(int(max_epochs), int(np.ceil(max_units / int(spots_per_epoch))))
     if not len(val_spots) or not len(train_spots):
@@ -452,7 +445,7 @@ def lens_embedding(
     loadings = model.W.weight.detach().float().cpu().numpy()  # vocabulary x Z_DIM: gene g's log-enrichment at a MetaSpot = W_g . z
     w3 = torch.softmax(model.mix3, 0).detach().cpu().numpy()
     del model, opt, best_state, crow_t, col_t, val_t
-    if dev.type == "cuda":  # later modules run in the same process; the cached ~20 GB (Atera 5k) blocked other GPU jobs
+    if dev.type == "cuda":  # later modules run in the same process; free the cached GPU memory for other jobs
         torch.cuda.empty_cache()
     heldout_spot_gain = np.full(len(names), np.nan, np.float32)
     heldout_spot_gain[present] = spot_gain

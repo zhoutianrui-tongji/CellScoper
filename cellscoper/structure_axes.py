@@ -7,16 +7,13 @@ MetaSpots of the same cell side. No MetaDomain is involved.
 
 The gene-shuffled null (below) also sets how each read-out counts, without any label: gene-embedding directions are
 whitened by the null's covariance (matched filter), and scales and read-outs are added with weight sqrt(1 - rho) / rho,
-rho = the null's share of the read-out's variance. Atera 1k: rho ~.90 at the smallest scale, ~.30 at the largest.
+rho = the null's share of the read-out's variance (high at the smallest scale, lower at larger ones).
 
 Labels: gene identities are shuffled within each cell side and the same score is recomputed, which keeps positions,
 MetaSpots and every cell's RNA mixture. A structure takes the MetaSpots above the lowest score at which the null's share
 above that score is at most q times the real share (the estimated share of false labels). A structure that never
 reaches this is not detected and takes no MetaSpot; there are no per-cell seats. Held-out marker enrichment is reported
 for every structure and does not change the labels.
-
-Atera BRCA 1k, leave-genes-out (2026-10-31): the gene-embedding read-out scored AUROC .540 (.533 without whitening and
-weights), MetaDomains .521, the count based annotation score .525, final labels of the seat/gate rule .511.
 """
 from __future__ import annotations
 
@@ -31,7 +28,7 @@ from .spatial_gene_embedding import _metaspot_vectors_many
 
 # Scores are averaged over about this many transcripts (MetaSpots of ~10 give 5 neighbours on Atera).
 AXIS_SMOOTH_TRANSCRIPTS = 50
-# Ridge of the null covariance, as a share of its mean eigenvalue. Atera 1k AUROC is flat from .01 to 1 (.540).
+# Ridge of the null covariance, as a share of its mean eigenvalue (results are insensitive between .01 and 1).
 WHITEN_RIDGE = 0.1
 # A structure needs at least this share of its side's MetaSpots above the threshold to count as detected.
 MIN_LABEL_SHARE = 0.002
