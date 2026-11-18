@@ -1,16 +1,15 @@
-# CellScoper 通用生产配置 v4
+# CellScoper 默认配置
 # ============================================================
-# 设计目标：
-# 1. 保持 Nuclear / Cytoplasmic broad compartment 的稳定性
-# 2. 提高 Nucleolus / Lamina / Nuclear Pore / ER 的 fine-label 保留率
-# 3. OMM 单独采用更严格的证据门槛，避免再次出现 OMM 过度膨胀
-# 4. 不使用 overlaps_nucleus 作为模型输入，避免 benchmark 信息泄漏
-# 5. 适合作为 SeqFISH / MERFISH / Xenium / CosMx 等平台的通用起点
+# 设计要点：
+# 1. 无监督发现亚细胞结构：MetaSpot -> 空间基因嵌入 + LENS -> MetaDomain 发现（不依赖参考基因）
+# 2. 注释（结构轴）是下游一步：每类结构用留出标志基因在本数据上检验，未通过的单独标出
+# 3. 每个细胞的结构量输出到 cell_structure_features.parquet
+# 4. 不使用 overlaps_nucleus 作为模型输入，核内外由细胞核边界推断
+# 5. 适合作为 Xenium / Atera / MERFISH / CosMx 等平台的通用起点
 #
 # 注意：
 # - YAML 中以 "#" 开头的内容均为注释，不参与程序解析
-# - 当前 annotation 参数偏向“fine-label sensitive”
-# - 如果换数据平台，优先微调 annotation，而不要先动 geometry / MetaSpot / DGI
+# - 如果换数据平台，优先微调 annotation，而不要先动 geometry / MetaSpot / LENS
 
 
 # ============================================================
@@ -18,6 +17,10 @@
 # ============================================================
 
 io:
+  # 默认打开（2026-11-03 用户批准；关闭设 false）：输出"细胞 × 结构"特征表 cell_structure_features.parquet
+  # （cellscoper/cell_features.py: structure_feature_table；需要注释）。每个细胞每一侧、每种结构和每个 MetaDomain 一行：带标签的 MetaSpot / 转录本比例，以及没有深度偏差的成对共定位比值（单细胞噪声大，
+  # 比较细胞群体时用 sum(pair_obs) / sum(pair_exp)）。
+  cell_structure_features: true
   # 最终 transcript-level 输出格式
   final_format: parquet
 
@@ -61,17 +64,13 @@ io:
   # 诊断表保存 Parquet
   write_diagnostic_parquet: false
 
-  # 超大数据仅在 adata1.obs 保留宽诊断列，避免复制到每条 transcript
-  broadcast_metaspot_diagnostics_to_transcripts: false
-
   # 是否在 final_data.parquet 之外额外写一套分区 Parquet 数据集
   write_partitioned_dataset: false
 
   # 是否计算输入文件 hash，用于可复现性追踪
   provenance_hash_inputs: true
 
-  # 最终输出前是否丢弃 transcript embedding 列，并把 adata1.h5ad 压缩为
-  # annotation 审计列 + canonical X_dgi_gcn_metaspot（不保留图和辅助 embedding）
+  # 最终 adata1.h5ad 是否只保留 X_lens 一种 MetaSpot 表示（去掉 X_gene_embedding），减小文件
   drop_embeddings: false
 
 
@@ -88,11 +87,7 @@ execution:
   profile: auto
   exact_max_metaspots: 200000
   sampled_max_metaspots: 2000000
-  memory_budget_gb: 64
-  scratch_dir: null
   partition_rows: 1000000
-  # Never replace a missing ANN/sampling backend with an unbounded exact job.
-  fail_on_backend_fallback: true
 
 
 # ============================================================
@@ -107,7 +102,7 @@ module1:
   # 重要：
   # false 表示不直接使用输入中的 overlaps_nucleus 作为预测依据
   # 而是根据 nucleus boundary 自己推断核内外位置
-  # benchmark 时必须保持 false，避免使用真值造成信息泄漏
+  # 评估时必须保持 false，避免使用真值造成信息泄漏
   use_input_nucleus_flags: false
 
   # 是否在分析前去除"外来转录本"（分割不准时混入的相邻细胞转录本）
@@ -136,43 +131,22 @@ module1:
 # ============================================================
 
 module2:
-  # 用于构建局部表达词袋的高频基因数量
+  # 每个转录本用"最近 bow_knn_k 个同细胞转录本中、最常见的 top_g 个基因"的距离加权词袋描述，
+  # 做 TF-IDF 后用稀疏随机投影降到 svd_n_components 维；模型在 Module 3 里逐细胞使用，不生成全局大表。
   top_g: 1024
-
-  # 每个 transcript 的局部 kNN 邻居数
   bow_knn_k: 12
-
-  # 每个细胞最多用于 SVD 训练的局部观测数
-  max_rows_per_cell_for_svd: 256
-
-  # 全局最多用于训练 SVD 的行数
-  max_svd_rows: 100000
-
-  # 局部表达 SVD 维度
   svd_n_components: 24
-
-  # 最多抽样多少细胞训练 SVD
+  # 估计 IDF 时抽样：最多这么多个细胞、每个细胞最多这么多个转录本、总共最多这么多行
   svd_sample_cells: 5000
-
+  max_rows_per_cell_for_svd: 256
+  max_svd_rows: 100000
   # 并行处理时每个任务包含的细胞数
   parallel_chunk_cells: 8
-
-  # false：使用标准局部表达来源
-  source_from_point_df: false
-
-  # 流式生成局部 embedding，降低内存占用
-  stream_local_embeddings: true
-
-  # 是否使用 TF-IDF
+  # 是否用 TF-IDF、是否做 TF 归一化、IDF 计算方式（log1p / log / none）
   use_tfidf: true
-
-  # 是否进行 TF normalization
   tf_norm: true
-
-  # IDF 计算方式
   idf_mode: log1p
-
-  # 空间邻域中的权重模式
+  # 邻居权重：gaussian / inv / uniform
   bow_weight_mode: gaussian
 
 
@@ -189,19 +163,14 @@ module3:
   # Validated on the 1W workload; still bounded by runtime.n_jobs and affinity.
   parallel_n_jobs: 12
 
-  # 强制 MetaSpot 空间连通
-  enforce_spatial_connectivity: true
+  # 有 z_location 时，MetaSpot 也按高度划分（三维连通和 Ward 聚类）；每个细胞的 MetaSpot 数仍按 x-y 位点数定。
+  use_z_location: true
 
-  # 按细胞核多边形把 MetaSpot 预算分配到核内/核外，MetaSpot 不跨越核膜。
-  # 关闭时约 30% 的 MetaSpot 同时含核内外转录本，其核质归属取多数票，
-  # 少数派被整体标错（2k-cell Xenium 审计：核质准确率 0.896 -> 0.951，
-  # 留出标志基因富集无下降）。
-  partition_by_nucleus: true
+  # MetaSpot = 细胞一侧（核内或核外分开切，MetaSpot 不跨越核膜）内空间连通的一块，空间约束 Ward 聚类，
+  # 特征为几何 + Module 2 局部基因组成（2k-cell Xenium 审计：分侧切分让核质准确率 0.896 -> 0.951）。
 
-  # 核心 MetaSpot 粒度参数
-  # 平均约每 10 个 unique transcript sites 形成一个 MetaSpot。
-  # 该尺度提高局部结构分辨率；max_metaspots_per_cell 和 DGI 节点保护
-  # 仍限制图规模。过粗的 MetaSpot 会把细结构与核/质背景混在一起。
+  # 核心 MetaSpot 粒度参数：平均约每 target_sites_per_metaspot 个不同的 x-y 位点形成一个 MetaSpot。
+  # 过粗的 MetaSpot 会把细结构与核/质背景混在一起。
   target_sites_per_metaspot: 15
 
   # 每个细胞最少 MetaSpot 数
@@ -231,221 +200,75 @@ module3:
   # 空间紧致度权重
   spatial_compactness: 1.0
 
-  # 用于 MetaSpot 分割的表达/几何特征维数
-  n_feat_hdb: 24
+  # 用于 MetaSpot 分割的表达/几何特征维数（取方差最大的这么多个）
+  n_segmentation_features: 24
+  # MetaSpot 分割的几何部分。legacy：组成特征 + 径向距离（3 个近乎相同的列）+ 绕核夹角 + 密度，取方差最大的列；
+  # isotropic：只用局部组成 + 密度，空间紧致性只来自坐标（各方向等权），坐标占总方差的份额 = segmentation_spatial_share。
+  segmentation_geometry: legacy
+  segmentation_spatial_share: 0.333
+  # 细胞一侧少于这么多个转录本时整体作为一个 MetaSpot；也是未设 spatial_min_component_size 时的最小块大小
+  min_segment_points: 30
 
-  # 以下 HDBSCAN 参数主要用于兼容或备用路径
-  hdbscan_min_cluster_size: 30
-  hdbscan_allow_single_cluster: true
-  hdbscan_min_samples_frac: 0.2
-
-  # 目标局部区域大小
-  target_sub_size: 30
-
-  # KMeans 最小 K
-  kmeans_min_k: 2
-
-  # KMeans 最大 K
-  kmeans_max_k: 50
-
-  # 是否启用 K 上限控制
-  use_k_cap: true
-
-  # 小 MetaSpot 合并阈值
-  merge_min_size: 20
-
-  # HDBSCAN 最大采样点
-  hdbscan_max_points: 1000
-
-  # KMeans 训练采样量
-  kmeans_train_size: 512
-
-  # KMeans batch size
-  kmeans_batch_size: 1024
-
-  # 小数据后端切换阈值
-  small_backend_cells: 1000
+  # 不超过该细胞数时用线程而非进程。分割是纯 Python 计算，线程受 GIL 限制：
+  # 1000 个全转录组细胞用线程或顺序处理要 4-5 分钟，用进程约 20 秒，结果相同。
+  small_backend_cells: 32
 
   # 顺序处理细胞阈值
-  sequential_cells: 1000
+  sequential_cells: 32
 
 
 # ============================================================
 # Module 5
-# MetaDomain 聚类
+# MetaSpot 表示（GE、LENS）与 MetaDomain
 # ============================================================
 
 module5:
-  # 分块聚类规模
-  block_size: 50000
+  # ---- MetaSpot 表示：空间基因嵌入（GE，X_gene_embedding）和 LENS（MetaSpot 掩码转录本模型，X_lens）----
+  # 注释（结构轴）同时读 GE 和 LENS；MetaDomain 只用 LENS。2026-11-02 起不再训练 CA-DMGI（三个平台上 LENS 不差于
+  # CA-DMGI，显存约 4.4 GB vs 22 GB），2026-11-03 删除其代码，同时删除只用于 KMeans MetaDomain 的 GE + LENS 拼接表示。
+  # LENS 最多训练轮数；按留出细胞的预测提升提前停止（5k 约 70–80 轮停止）。需要 GPU（无 GPU 时用 CPU，很慢）。
+  lens_max_epochs: 200
+  # LENS 抽样训练：每轮只训练这么多个随机 MetaSpot，训练时间不随数据量增长（全数据用）；0 = 每轮用全部 MetaSpot。
+  # 提前停止改按"见过的 MetaSpot 数"计（400 万个无提升即停，最多 1 亿个）。
+  lens_spots_per_epoch: 0
+  # 训练结束后，再把最多这么多个随机细胞的基因在细胞内打乱并编码一次，作为结构轴和 MetaDomain 发现的空模型。
+  lens_null_cells: 10000
+  # LENS 预测被遮转录本时的背景组成 B：learned = 本细胞组成、低秩轮廓与全片组成的可学混合（原版）；
+  # own = 只用本细胞本侧组成（去掉该 MetaSpot，向本细胞低秩轮廓收缩 10 个伪计数），没有全片成分，
+  # LENS 只能学“这个位置与本细胞平均的差别”，不学细胞类型组成（打乱输入后不再认得参考基因）。annotation.evidence_label_rule: lens_count 需要 own。
+  # 默认 own（v1.0.0 起）。
+  lens_background: own
+  # LENS 每条转录本是否输入它在细胞里的绝对径向位置（到核、到细胞膜的相对距离）。false = 只留核/质标记和相对 MetaSpot 的位置。
+  # 本细胞背景（own）下径向位置会占满 z、盖过周围基因的信息（模拟：焦点 A/B 有 .642、无 .711）；Atera 5k 留出标签不变。
+  # 默认 false（v1.0.0 起）。
+  lens_absolute_position: false
 
-  # auto 由 execution profile 决定：exact 保持全局 consensus Leiden；
-  # sampled/streaming 使用 cell 对齐的局部原型 -> 全局原型聚类。
-  large_scale_method: auto
-  hierarchical_block_nodes: 100000
-  hierarchical_local_target_size: 100
-  hierarchical_global_target_size: 400
-  hierarchical_max_local_clusters: 2000
-  hierarchical_min_global_clusters: 2
-  hierarchical_max_global_clusters: 8000
-  hierarchical_batch_size: 8192
-  hierarchical_max_iter: 60
+  # 空间基因嵌入：学嵌入的配对半径、取邻居半径，单位与输入坐标相同；有 z_location 时按 3D 距离。
+  # auto：取数据 x-y 平面"最近邻转录本中位距离"的倍数，不依赖坐标单位（µm / 像素均可）。
+  gene_embedding_pair_radius: auto
+  gene_embedding_neighbour_radius: auto
+  # multiscale（默认）：在 3、7、14 倍转录本平均间距三个尺度上各做一次基因嵌入后拼接，不需要选半径。
+  #   SimFISH v2（11 份）：共定位模块 F1 约 0.55 -> 0.70；Atera 2k：MetaDomain 留出 AUROC 与单尺度持平。
+  # density：只用 10 倍间距。
+  gene_embedding_scale: multiscale
+  gene_embedding_dim: 32
+  # 转录本少于此数的基因不学向量；稀有配对向"无关联"收缩的伪计数
+  gene_embedding_min_gene_count: 100
+  gene_embedding_pseudo_count: 5.0
+  # 学嵌入最多用多少个细胞（全部转录本仍会得到邻居向量）
+  gene_embedding_max_cells: 20000
 
-  # 在 CA-DMGI 共识 embedding 上运行多 resolution、多随机种子 Leiden，
-  # 再用稀疏边级 co-association 得到最终 MetaDomains。minibatch_kmeans
-  # 保留为旧自动 K 路径和论文消融。
-  clustering_method: consensus_leiden
-
-  # auto：自动选择可用 representation
-  cluster_rep: auto
-
-  # 是否使用去细胞效应后的 representation
-  cluster_rep_decell: false
-
-  # 最小 MetaDomain 大小
-  min_domain_size: 5
-
-  # Consensus Leiden：mutual-kNN 只保留相互近邻，减少 hub 边。
-  consensus_neighbors: 20
-  consensus_resolutions:
-    - 1.0
-    - 2.0
-    - 4.0
-    - 6.0
-    - 8.0
-  consensus_seeds:
-    - 17
-    - 42
-    - 89
-  consensus_leiden_iterations: 2
-
-  # 避免“一个大簇”仅因稳定而获胜，也避免极细碎聚类。若没有候选满足
-  # 约束，使用带 small/nonrecurrent 惩罚的最佳稳定性候选并明确审计。
-  consensus_min_average_size: 100
-  consensus_max_average_size: 800
-  consensus_min_recurrence_cells: 2
-  consensus_max_small_cluster_fraction: 0.10
-  consensus_max_nonrecurrent_fraction: 0.10
-
-  # 三个随机种子中至少两个同意该 mutual-kNN 边，才进入最终 consensus 图。
-  consensus_edge_agreement: 0.6666667
-
-  # 在距离最佳稳定性不超过 0.10 的可行候选中选择结构最细者，避免微小 ARI
-  # 优势系统性偏向过粗分区。consensus_min_stability 只用于报告与告警
-  # （uns 中的 stability_floor_met）：跨 seed ARI 本身有百分之几的噪声，
-  # 把 0.55 作为硬门槛会让同一配置的两次运行在最细与最粗分辨率之间跳变。
-  consensus_min_stability: 0.55
-  consensus_stability_tolerance: 0.10
-
-  # 随机种子
+  # 随机种子（LENS 训练和 MetaDomain 发现）
   random_seed: 42
 
-  # 图结构、表达、空间三类信息权重
-  w_gc: 0.4
-  w_expr: 0.4
-  w_sp: 0.2
-
-  use_gc: true
-  use_expr: true
-
-  # 聚类速度预设
-  speed_preset: ultra
-
-  # 是否加入空间特征
-  use_spatial_feats: true
-
-  # 是否考虑 cell effect correction
-  use_decell: true
-
-  # 是否使用 cosine 相似度
-  use_cosine: true
-
-  # 是否启用 cluster 数量上限控制
-  enable_cap: true
-
-  # auto：自动选择 MetaDomain 数量 K
-  estimate_k: auto
-
-  # estimate_k=fixed 时使用
-  fixed_k: 1024
-
-  # 自动 K 搜索范围
-  auto_k_min: 20
-  auto_k_max: 8000
-
-  # 自动 K 对平均 cluster size 的合理范围约束
-  auto_k_min_average_size: 20
-  auto_k_max_average_size: 500
-
-  # K 候选数量
-  auto_k_n_candidates: 8
-
-  # 自动 K 训练采样量
-  auto_k_train_sample: 50000
-
-  # 自动 K 验证采样量
-  auto_k_validation_sample: 3000
-
-  # 自动 K 采样随机种子
-  auto_k_sample_seed: 2026
-
-  # 多随机种子检查聚类稳定性
-  auto_k_seeds:
-    - 42
-    - 43
-
-  # 最低聚类稳定性要求
-  auto_k_stability_min: 0.4
-
-  # 允许的小 cluster 最大比例
-  auto_k_max_small_cluster_fraction: 0.01
-
-  # 每个 cluster 至少需要的训练样本数
-  auto_k_min_train_per_cluster: 10
-
-  # 自动 K MiniBatchKMeans batch size
-  auto_k_batch_size: 2048
-
-  # 自动 K 最大迭代次数
-  auto_k_max_iter: 30
-
-  # 小于该规模时允许完整评估
-  auto_k_full_eval_max: 100000
-
-  # 每个 cluster 目标 MetaSpot 数
-  target_sub_per_cluster: 800
-
-  # cluster / cell 的经验目标
-  target_cluster_per_cell: 1.0
-
-  # 允许的 K 范围
-  K_min: 200
-  K_max: 8000
-
-  # 重要：
-  # MetaDomain 聚类时核内、核外分开聚类
-  # 避免 broad compartment 被聚类混合
-  split_by_nucleus: true
-
-  # nucleus split 阈值
-  nucleus_threshold: 0.0
-
-  # cluster cap 参数
-  cap_ratio_base: 0.015
-  cap_min_keep: 3
-  cap_margin_tau: 0.015
-  cap_max_frac_soft: 0.05
-
-  # 每个 block 的训练采样
-  train_sample_per_block: 20000
-
-  # assignment 分块大小
-  assign_chunk_size: 5000
-
-  # MiniBatchKMeans 参数
-  mbk_batch_size: 512
-  mbk_max_iter: 60
-
+  # ---- MetaDomain：从 LENS 无参考发现（cellscoper/metadomain_discovery.py）----
+  # 2026-11-03 起 MetaDomain 只有这一种（取代原来每侧 25 个 KMeans 类）：从 LENS 的 z 找出比基因打乱对照更密集、
+  # 两半细胞都能重复的方向（HDBSCAN）；数量由数据决定，不属于任何 MetaDomain 的 MetaSpot 为背景（meta-domain = -1）。
+  # 核内、胞质一起聚类（门槛按侧和深度分档）：分开聚类会在 2D 核轮廓两侧造出"镜像"结构域。每个 MetaDomain
+  # 报告核内比例和核边界检查（adata1.uns["metadomain_discovery"]）。需要 lens_null_cells > 0。
+  # Atera 1k / HEK / CosMx：基因打乱的输入找到 0 个；不同运行之间可重复的比例 Atera 78-84%、HEK 100%（KMeans 20-45%）。
+  # 发现时允许的假阳性比例（与结构轴 evidence_axis_q 相同的含义）。
+  metadomain_q: 0.2
 
 # ============================================================
 # Module 6
@@ -459,253 +282,55 @@ module6:
   # 是否保存 MetaDomain 几何形状摘要
   save_shape_summary: true
 
-  # MetaDomain representation pooling 方式
-  pool_reps: auto
-
-  # pooling 后是否归一化
-  pool_normalize: true
-
-
-# ============================================================
-# Module 7
-# MetaSpot graph
-# ============================================================
-
-module7:
-  # auto：根据当前 pipeline 自动决定 graph unit
-  graph_unit: auto
-
-  # auto resolves to exact / FAISS / PyNNDescent from the execution profile.
-  knn_backend: auto
-  ann_candidate_multiplier: 4
-  ann_query_chunk_nodes: 100000
-  ann_train_sample: 1000000
-  faiss_hnsw_m: 32
-  faiss_nprobe: 32
-  faiss_pq_subvectors: 8
-  faiss_pq_bits: 8
-  # IVFPQ streaming mode uses CUDA automatically when a GPU-enabled FAISS
-  # build is present. Set true to require GPU and fail if it is unavailable.
-  faiss_use_gpu: auto
-  faiss_gpu_device: 0
-
-  # scVI 备用 representation 参数
-  scvi_epochs: 100
-  scvi_n_latent: 32
-  scvi_lr: 0.001
-  scvi_batch_size: 256
-
-  # representation 优先级
-  rep_priority:
-    - X_dgi_gcn
-    - X_dgi_sage
-    - X_expr
-    - X_pca
-
-  # 不同图通道的邻居数量
-  neighbors:
-    k_expr: 15
-    k_geom: 15
-    k_spatial: 6
-
-  # MetaSpot 表达 PCA/SVD 维数
-  metaspot_expr_n_components: 32
-
-  # MetaSpot 融合图：
-  # 80% expression similarity
-  metaspot_alpha_expr: 0.8
-
-  # 20% within-cell spatial adjacency
-  metaspot_alpha_spatial: 0.2
-
-  # GCN edge normalization
-  metaspot_edge_norm: gcn
-
-  # 是否将 geometry features 加入 MetaSpot node features
-  metaspot_use_geometry_features: true
-
-  # 表达关系只连接来自不同细胞的 MetaSpots，使该分支专门学习可跨细胞
-  # 复现的亚细胞表达模式；同细胞局部连续性由独立 spatial relation 建模。
-  metaspot_expr_cross_cell_only: true
-
-  # full-batch MetaSpot DGI 的安全上限；超过时改用 metadomain
-  # 提高此数值只会关闭保护，并不会降低显存/内存复杂度
-  max_full_batch_nodes: 200000
-
-  # 通用图融合参数
-  alpha_expr: 0.5
-  alpha_geom: 0.5
-
-  # 同一细胞边权增强
-  same_cell_beta: 0.5
-
-  # 每个节点最多保留多少边
-  topk_prune: 32
-
-  # random-walk normalization
-  edge_norm: rw
-
-  # 输入特征标准化
-  feature_scale: standard
-
-
-# ============================================================
-# Module 8
-# DGI-GCN MetaSpot embedding
-# ============================================================
-
-module8:
-  # 当前推荐以 MetaSpot 为 DGI 节点 (metaspot or metadomain)
-  dgi_unit: metaspot
-
-  # cell_aware_dmgi：分别编码跨细胞表达图和细胞内空间图，再学习逐 MetaSpot
-  # 共识 gate。standard_dgi 保留为原单图 DGI 消融/兼容路径。
-  dgi_framework: cell_aware_dmgi
-
-  # auto uses full-batch below the exact threshold and neighbor sampling above.
-  training_mode: auto
-  sampled_dgi_epochs: 100
-  sampled_batch_size: 4096
-  sampled_expression_fanout:
-    - 15
-    - 10
-  sampled_spatial_fanout:
-    - 6
-    - 6
-  sampled_nodes_per_epoch: 500000
-  sampled_inference_batch_size: 8192
-  sampled_validation_nodes: 50000
-  sampled_num_workers: 0
-  # auto selects CUDA when visible; sampled CA-DMGI then uses mixed precision.
-  dgi_device: auto
-  amp: true
-
-  # 最大训练 epoch。真实 2k-cell 审计中 expression 分支在约 60 epoch 已
-  # 接近饱和；200 epoch 保留 spatial 分支继续学习，同时减少不必要计算。
-  dgi_epochs: 200
-
-  # 当前关闭 GraphSAGE DGI
-  enable_dgi_sage: false
-
-  # residual：输入投影 + 初始特征回注 + 残差 GCN + LayerNorm；
-  # plain：兼容原来的顺序堆叠 GCN
-  dgi_encoder: residual
-
-  # 图消息传播层数；默认保持两跳感受野，避免全局表达图过平滑
-  dgi_layers: 2
-
-  # GCN hidden dimension
-  dgi_hidden: 64
-
-  # 最终 embedding dimension；当前真实数据中 32 维已覆盖绝大多数
-  # 64 维 embedding 方差，降低弱维度被 M5 标准化后放大的风险
-  dgi_out: 32
-
-  # 残差块 dropout
-  dgi_dropout: 0.1
-
-  # 每层重新注入初始投影的比例
-  dgi_residual_alpha: 0.1
-
-  # 残差块后使用 LayerNorm
-  dgi_layer_norm: true
-
-  # standard_dgi 回退路径的 corruption 配置；CA-DMGI 固定在同细胞内
-  # 扰动特征，从而不把任何真实 MetaSpot 当作负类。
-  dgi_corruption_mode: auto
-
-  # 以下三项仅用于 standard_dgi 旧局部排序消融。生产 CA-DMGI 中关闭，
-  # 因为“同细胞非邻居”可能属于同一真实结构，会产生 false negatives。
-  dgi_local_loss_weight: 0.0
-  dgi_local_temperature: 0.2
-  dgi_local_samples: 65536
-
-  # auto 优先使用纯 MetaSpot 空间图；若不存在则使用当前 DGI 融合图。
-  dgi_local_graph_key: auto
-
-  # CA-DMGI 的两个显式关系图。
-  dmgi_expression_graph_key: metaspot_expr_connectivities
-  dmgi_spatial_graph_key: metaspot_spatial_connectivities
-
-  # 两个 relation-specific local Infomax 目标等权；consensus 项只负责让
-  # 两个分支形成可聚类的公共空间，不强迫它们完全相同。
-  dmgi_expression_weight: 1.0
-  dmgi_spatial_weight: 1.0
-  dmgi_consensus_weight: 0.1
-
-  # gate 限制在 [0.1, 0.9]，防止任一关系在训练中被彻底关闭。
-  dmgi_gate_floor: 0.1
-
-  # 以总损失 EMA 进行早停；200 是最大 epoch，不保证每次都跑满。
-  dmgi_early_stopping: true
-  dmgi_min_epochs: 40
-  dmgi_patience: 15
-  dmgi_min_delta: 0.0001
-
-  # CPU 自动使用 PyTorch CSR 稀疏矩阵乘法，避免 PyG COO scatter 在大图上
-  # 的高开销；GPU 仍使用原生 PyG 路径。设为 pyg 可复现旧 CPU 后端。
-  dgi_cpu_backend: auto
-
-  # learning rate
-  dgi_lr: 0.001
-
-  # weight decay
-  dgi_weight_decay: 0.0001
-
-  # gradient clipping
-  dgi_clip_grad: 1.0
-
-  # 随机种子
-  random_seed: 42
 
 
 # ============================================================
 # Annotation
-# RAP-X + local MetaSpot refinement
+# 证据注释（细胞内置换零分布 + 留出标志基因检验）
 # ============================================================
 
 annotation:
-  # 开启亚细胞注释
+  # 开启亚细胞注释（设为 false 或 method: none 跳过注释）
   enable: true
-
-  # 注释方法：evidence（唯一的方法；设为 none 可跳过注释）
-  # 按细胞内混合期望给每个单位打分，用细胞内置换做零分布，并内置留出标志基因
-  # 检验。输出三列：
-  #   subcellular_annotation              最终标签：每个细胞内每类结构取得分最高的区块，各类齐全（含核斑共八类）
-  #   subcellular_annotation_support      最终标签的可信度：segmentation（核/质，来自核分割）、
-  #                                       validated（该结构在本数据上通过检验）、unvalidated（仅按参考放置）
-  #   subcellular_annotation_validated    只含在本数据上通过留出基因检验的结构
+  # 注释方法：evidence（结构轴规则，cellscoper/structure_axes.py）。输出列：
+  #   subcellular_annotation              最终标签：分数超过门槛的 MetaSpot 标为该结构，其余为 Nucleus / Cytosol
+  #   subcellular_annotation_support      可信度：segmentation（核/质，来自核分割）、validated（该结构在本数据上
+  #                                       通过留出基因检验）、unvalidated（未通过）
+  #   subcellular_annotation_validated    只含通过留出基因检验的结构
   #   subcellular_annotation_exploratory  检验标准放宽一档
+  # 每个 MetaSpot 对每种结构有一个连续分数：参考标志基因只给出方向（GE 和 LENS 解码器里），分数在同一细胞侧
+  # 相邻 MetaSpot 上平均；门槛来自细胞内打乱基因的空模型，按估计的假标签比例定；留出检验只报告，不改变标签。
+  # 2026-11-02 起为默认，2026-11-03 删除旧的计数规则（legacy）。相同标记面积的留基因 OR：Atera 1k 旧规则 1.29 /
+  # 结构轴 1.53，HEK 1.16 / 1.22，CosMx 0.99 / 1.21，Atera 5k 1.42 / 1.67；打乱基因的输入上旧规则有 3.8-10.5%
+  # 假标签，结构轴 0-0.9%。
   method: evidence
 
-  # marker：只统计参考标志基因；propagated：按与标志基因的细胞内共定位
-  # 给所有基因加权，证据来自单位内的全部转录本。
-  evidence_score: propagated
-
-  # auto：每个结构在 MetaSpot 与 MetaDomain 两个层级中取留出检验更强者。
-  evidence_unit: auto
-
-  # 判定阈值（BH FDR，零分布为细胞内打乱基因标签的置换）。这是唯一需要按用途调整的参数：
-  # 调大可提高覆盖率，留出富集会相应下降，报告中会给出实际数值。
-  evidence_fdr: 0.05
-
-  # 内置留出检验的折数、置换零分布的重复次数、自助抽样次数。
+  # 结构分数从哪里读：auto（跑了 LENS 时用 ge+lens，否则 ge）、ge、lens、ge+lens。
+  evidence_axis_source: auto
+  # 每种结构允许的假标签比例；达不到的结构记为未检出，不打标签。
+  evidence_axis_q: 0.2
+  # 分数在同一细胞侧的相邻 MetaSpot 上平均，平均范围约这么多个转录本（按转录本数定，换平台不用改）。
+  evidence_axis_smooth_transcripts: 50
+  # 胞质分数在定阈值前，按到细胞边界的距离分这么多个等人数档，档内减去均值（去掉群体共有的由外到内趋势）。0 = 关闭。
+  evidence_axis_radial_bands: 0
+  # 最终标签的规则：axis = 结构轴（细胞内对比）；lens_count（v1.0.0 起默认） = 每个细胞标多少由 LENS 计数决定（全片一个 Otsu 阈值，
+  # 跨细胞可比），标在哪里按计数证据与结构轴分数的细胞内排名平均；结构须过 LENS 门槛（留出参考基因 vs 表达匹配随机基因集 z >= 3）。
+  # lens_count 需要 module5.lens_background: own。见 cellscoper/lens_count.py。
+  evidence_label_rule: lens_count
+  # 留出基因检验：折数、自助抽样次数、用多少个细胞（每折都要重算表示，只影响报告）。
   evidence_validation_folds: 5
-  evidence_null_sets: 10
   evidence_bootstrap: 2000
-
-  # 基因在该区室内至少有这么多转录本才参与打分。
+  evidence_axis_validation_cells: 3000
+  # 打乱基因的空模型只在随机抽取的这么多细胞上算门槛；分数和标签仍覆盖全部细胞。
+  evidence_max_cells: 10000
+  # 基因在该区室内至少有这么多转录本才参与留出检验。
   evidence_min_gene_transcripts: 50
-
   # 参考基因归入某一结构所需的领先幅度（0-1 归一化得分）。
   evidence_marker_margin: 0.2
-
-  # 数据门槛：基因核内偏好在两半细胞间的 Spearman 相关低于该值时，判定数据
-  # 不具备亚细胞分辨率，只输出 Nucleus/Cytosol。
+  # 数据门槛：基因核内偏好在两半细胞间的 Spearman 相关低于该值时，判定数据不具备亚细胞分辨率，
+  # 只输出 Nucleus/Cytosol。
   evidence_min_resolution: 0.3
-
   evidence_seed: 0
-
 
 
 # ============================================================
@@ -722,10 +347,10 @@ runtime:
   # 每个 worker 内 BLAS 保持单线程，避免嵌套线程池
   blas_threads: 1
 
-  # Numba/PyNNDescent 内层线程；会按 OpenBLAS 64 线程元数据上限安全截断
+  # Numba 内层线程；会按 OpenBLAS 64 线程元数据上限安全截断
   numba_threads: 4
 
-  # Scanpy 邻居图线程；不得超过 numba_threads 的实际安全值
+  # 导入时设置的 SCANPY_N_JOBS 环境变量上限（流程本身不用 scanpy，给同一进程里的下游分析用）
   scanpy_n_jobs: 4
 
   # 使用 threadpoolctl 防止线程过度嵌套

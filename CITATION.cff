@@ -3,18 +3,17 @@ message: If you use CellScoper in your research, please cite it as below.
 title: CellScoper
 version: 1.0.0
 authors:
-  - family-names: ""
-    given-names: ""
-    affiliation: ""
-    orcid: ""
-  - name: ""
+  - family-names: Zhou
+    given-names: Tianrui
 license: MIT
-repository-code: ""
-date-released: 2025-12-02
-abstract:
+repository-code: "https://github.com/zhoutianrui-tongji/CellScoper"
+date-released: 2026-11-18
+abstract: >-
+  CellScoper finds subcellular structures in segmented cells from transcript positions alone, labels known structures
+  with built-in validation against held-out reference markers, and reports per-cell structure amounts for
+  subcellular-resolution spatial transcriptomics (Xenium, Atera, CosMx).
 keywords:
-  - 
-  - 
-  - 
-  - 
-  - 
+  - spatial transcriptomics
+  - subcellular RNA localization
+  - imaging-based spatial transcriptomics
+  - representation learning

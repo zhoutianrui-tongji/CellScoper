@@ -4,8 +4,8 @@ import os
 import pytest
 from click.testing import CliRunner
 
-from cellscope.cli import main
-from cellscope.run_lock import (
+from cellscoper.cli import main
+from cellscoper.run_lock import (
     LOCK_FILENAME,
     OutputDirectoryLockError,
     OutputDirectoryRunLock,

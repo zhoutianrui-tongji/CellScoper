@@ -1,42 +1,23 @@
 import copy
-import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 
-import anndata as ad
 import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from click.testing import CliRunner
-from scipy import sparse
 
-from cellscope.config import (
+from cellscoper.config import (
     ANNOTATION_SCHEMA_VERSION,
     fingerprint_module,
     fingerprint_stage,
     get_default_params_path,
     load_params_yaml,
-    resolve_annotation_configuration,
     stage_config_subset,
 )
-from cellscope.io import read_boundaries, read_spatial_transcripts
-from cellscope.plotting_style import (
-    SUBCELLULAR_LABEL_GROUPS,
-    SUBCELLULAR_LABEL_ORDER,
-    SUBCELLULAR_LABEL_PALETTE,
-)
-
-
-def _write_inputs(tmp_path):
-    paths = {}
-    for name in ("spatial", "cell", "nucleus"):
-        path = tmp_path / f"{name}.csv"
-        path.write_text("x,y\n0,0\n", encoding="utf-8")
-        paths[name] = path
-    return paths
+from cellscoper.io import read_boundaries, read_spatial_transcripts
 
 
 @pytest.mark.parametrize("suffix", [".csv", ".parquet"])
@@ -126,7 +107,7 @@ def test_pipeline_import_uses_single_blas_thread_with_threading_backend(tmp_path
     environment = os.environ.copy()
     environment.update(
         {
-            "CELLSCOPE_CONFIG": str(config),
+            "CELLSCOPER_CONFIG": str(config),
             "OPENBLAS_NUM_THREADS": "128",
             "OMP_NUM_THREADS": "128",
             "MKL_NUM_THREADS": "128",
@@ -142,16 +123,13 @@ def test_pipeline_import_uses_single_blas_thread_with_threading_backend(tmp_path
             sys.executable,
             "-c",
             (
-                "import os, sys; import cellscope.cli; "
-                "assert 'cellscope.pipeline' not in sys.modules; "
-                "import cellscope.pipeline; import numba; "
-                "import scanpy as sc; "
-                "numba.set_num_threads(sc.settings.n_jobs); "
+                "import os, sys; import cellscoper.cli; "
+                "assert 'cellscoper.pipeline' not in sys.modules; "
+                "import cellscoper.pipeline; import numba; "
                 "print('|'.join(os.environ[name] for name in "
                 "('OPENBLAS_NUM_THREADS', 'OMP_NUM_THREADS', "
                 "'MKL_NUM_THREADS', 'NUMEXPR_NUM_THREADS', "
-                "'NUMBA_NUM_THREADS')) + '|' + str(numba.get_num_threads()) "
-                "+ '|' + str(sc.settings.n_jobs))"
+                "'NUMBA_NUM_THREADS')) + '|' + str(numba.get_num_threads()))"
             ),
         ],
         cwd=str(package_root),
@@ -162,25 +140,18 @@ def test_pipeline_import_uses_single_blas_thread_with_threading_backend(tmp_path
         timeout=90,
     )
 
-    assert result.stdout.strip().splitlines()[-1] == "1|1|1|1|5|5|5"
+    assert result.stdout.strip().splitlines()[-1] == "1|1|1|1|5|5"
 
 
 def test_default_annotation_config_resolves_production_defaults():
     config = load_params_yaml(path=get_default_params_path())
     public = config["annotation"]
 
-    assert config["module5"]["clustering_method"] == "consensus_leiden"
     assert config["module3"]["parallel_n_jobs"] == 12
-    assert len(config["module5"]["consensus_seeds"]) >= 2
-    assert config["module7"]["metaspot_expr_cross_cell_only"] is True
-    assert config["module8"]["dgi_framework"] == "cell_aware_dmgi"
-    assert config["module8"]["dgi_epochs"] == 200
-    assert config["module8"]["dgi_device"] == "auto"
-    assert config["module8"]["dgi_cpu_threads"] == 0
-    assert config["module8"]["dgi_sparse_layout"] == "auto"
-    assert config["module8"]["dmgi_fused_corruption_pass"] is True
-    assert config["module8"]["dmgi_gate_floor"] == 0.1
-    assert config["module8"]["dgi_local_loss_weight"] == 0.0
+    assert config["module5"]["metadomain_q"] == 0.2
+    assert "fixed_k" not in config["module5"] and "lens_weight" not in config["module5"]
+    assert config["io"]["cell_structure_features"] is True
+    assert "module7" not in config and "module8" not in config
 
     assert public["method"] == "evidence"
     assert config["module1"]["remove_foreign_transcripts"] is True
@@ -261,34 +232,3 @@ def test_metadomain_random_seed_invalidates_build_and_module5():
         changed,
         "m5",
     )
-
-
-def test_subcellular_publication_palette_has_one_canonical_side_assignment():
-    nuclear = set(SUBCELLULAR_LABEL_GROUPS["Nuclear side"])
-    cytoplasmic = set(SUBCELLULAR_LABEL_GROUPS["Cytoplasmic side"])
-
-    assert nuclear.isdisjoint(cytoplasmic)
-    assert nuclear | cytoplasmic == set(SUBCELLULAR_LABEL_ORDER) - {"Unknown"}
-    assert set(SUBCELLULAR_LABEL_PALETTE) == set(SUBCELLULAR_LABEL_ORDER)
-    assert SUBCELLULAR_LABEL_PALETTE == {
-        "Nucleus": "#2F5D8C",
-        "Nucleolus": "#6B5CA5",
-        "Lamina": "#4F83B6",
-        "Nuclear Pore": "#4FA7B8",
-        "Nuclear Speckle": "#3E9C7A",
-        "Cytosol": "#D6A23C",
-        "ER": "#E2743E",
-        "OMM": "#B84A62",
-        "Unknown": "#9AA0A6",
-    }
-
-
-def test_removed_rapx_method_is_rejected_with_a_pointer_to_the_tag():
-    import inspect
-
-    import cellscope.pipeline as pipeline_module
-
-    source = inspect.getsource(pipeline_module)
-    assert "annotation.method 'rapx' was removed" in source
-    assert "legacy-rapx" in source
-    assert not hasattr(pipeline_module, "run_rapx")

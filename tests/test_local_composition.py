@@ -9,10 +9,16 @@ import numpy as np
 import pandas as pd
 import anndata as ad
 import scipy.sparse as sp
-import cellscope.pipeline as pipeline_module
+import cellscoper.metaspots as metaspots_module
 
-from cellscope.pipeline import _LocalCompositionModel, _coerce_bool_series, _configure_rnalocate_augmentation, _prepare_apex_gold_reference, _load_default_gold_tables, _sanitize_obs_for_h5ad, _is_count_like_matrix, _resume_build_outputs, _allocate_partition_target_counts, _enforce_spatially_connected_labels, _metaspot_segmentation_audit, _migrate_legacy_metaspot_columns, _select_top_variance_features, _save_adata, _stretch_signed_geometry, _target_metaspot_count, _validate_adata1_point_df_alignment, build_point_geometry_v2, build_composition_embeddings, build_adata1, build_adata2_from_adata1_and_pointdf, per_cell_clustering
-from cellscope.config import module_config_subset, stage_config_subset
+from cellscoper.checkpoints import _sanitize_obs_for_h5ad, _resume_build_outputs, _save_adata
+from cellscoper.composition import _LocalCompositionModel, build_composition_embeddings
+from cellscoper.geometry import _stretch_signed_geometry, build_point_geometry_v2
+from cellscoper.metadomains import build_adata2_from_adata1_and_pointdf
+from cellscoper.metaspots import _allocate_partition_target_counts, _enforce_spatially_connected_labels, _metaspot_segmentation_audit, _select_top_variance_features, _target_metaspot_count, _validate_adata1_point_df_alignment, build_adata1, per_cell_clustering
+from cellscoper.reference import _configure_rnalocate_augmentation, _prepare_apex_gold_reference, _load_default_gold_tables
+from cellscoper.runtime import _coerce_bool_series
+from cellscoper.config import module_config_subset, stage_config_subset
 
 
 @contextmanager
@@ -27,23 +33,22 @@ module2:
   svd_sample_cells: 4
   use_tfidf: true
   tf_norm: true
-  stream_local_embeddings: true
 runtime:
   n_jobs: 1
   joblib_backend: threading
 """
-    old = os.environ.get("CELLSCOPE_CONFIG")
+    old = os.environ.get("CELLSCOPER_CONFIG")
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as handle:
         handle.write(content)
         path = handle.name
-    os.environ["CELLSCOPE_CONFIG"] = path
+    os.environ["CELLSCOPER_CONFIG"] = path
     try:
         yield
     finally:
         if old is None:
-            os.environ.pop("CELLSCOPE_CONFIG", None)
+            os.environ.pop("CELLSCOPER_CONFIG", None)
         else:
-            os.environ["CELLSCOPE_CONFIG"] = old
+            os.environ["CELLSCOPER_CONFIG"] = old
         os.unlink(path)
 
 
@@ -68,14 +73,6 @@ def _synthetic_transcripts():
 
 
 class LocalCompositionTests(unittest.TestCase):
-    def test_count_like_matrix_rejects_normalized_proportions(self):
-        self.assertTrue(
-            _is_count_like_matrix(sp.csr_matrix([[0.0, 2.0], [3.0, 1.0]]))
-        )
-        self.assertFalse(
-            _is_count_like_matrix(sp.csr_matrix([[0.25, 0.75]]))
-        )
-
     def test_module6_preserves_raw_counts_separately_from_tf_mean(self):
         obs = pd.DataFrame(
             {
@@ -101,8 +98,6 @@ class LocalCompositionTests(unittest.TestCase):
         result = build_adata2_from_adata1_and_pointdf(
             adata1,
             pd.DataFrame(),
-            module6_config_override={"pool_reps": []},
-            graph_unit_override="metadomain",
         )
 
         np.testing.assert_allclose(
@@ -113,7 +108,8 @@ class LocalCompositionTests(unittest.TestCase):
             np.asarray(result.X.sum(axis=1)).ravel(),
             np.ones(2),
         )
-        self.assertTrue(_is_count_like_matrix(result.layers["counts"]))
+        counts = result.layers["counts"]
+        self.assertTrue(np.allclose(counts.data, np.round(counts.data)) and (counts.data >= 0).all())
         self.assertIn(
             "layers_counts",
             result.uns["matrix_semantics"],
@@ -140,8 +136,6 @@ class LocalCompositionTests(unittest.TestCase):
         result = build_adata2_from_adata1_and_pointdf(
             adata1,
             pd.DataFrame(),
-            module6_config_override={"pool_reps": []},
-            graph_unit_override="metadomain",
         )
 
         assert list(result.obs.columns) == [
@@ -449,6 +443,7 @@ class LocalCompositionTests(unittest.TestCase):
                 index=["m1", "m2"],
             ),
         )
+        adata1.obsm["X_lens"] = np.zeros((2, 3), dtype=np.float32)
         adata2 = ad.AnnData(
             np.zeros((2, 1), dtype=np.float32),
             obs=pd.DataFrame(index=["d1", "d2"]),
@@ -485,7 +480,7 @@ class LocalCompositionTests(unittest.TestCase):
         self.assertEqual(len(resumed_final), 3)
 
 
-    def test_n_feat_hdb_limits_features_by_local_variance(self):
+    def test_segmentation_features_are_limited_by_local_variance(self):
         matrix = np.array(
             [
                 [0.0, 0.0, 0.0, 4.0],
@@ -563,14 +558,14 @@ class LocalCompositionTests(unittest.TestCase):
         ).astype(np.float32)
         features = rng.normal(size=(600, 12)).astype(np.float32)
         labels = np.zeros(600, dtype=np.int32)
-        real_clustering = pipeline_module.AgglomerativeClustering
+        real_clustering = metaspots_module.AgglomerativeClustering
 
         def _full_tree_clustering(*args, **kwargs):
             kwargs["compute_full_tree"] = True
             return real_clustering(*args, **kwargs)
 
         with mock.patch.object(
-            pipeline_module,
+            metaspots_module,
             "AgglomerativeClustering",
             side_effect=_full_tree_clustering,
         ):
@@ -687,7 +682,6 @@ class LocalCompositionTests(unittest.TestCase):
                 target_sites_per_metaspot=2,
                 min_metaspots_per_cell=2,
                 max_metaspots_per_cell=3,
-                partition_by_nucleus=True,
             )
 
         expected = {
@@ -769,10 +763,8 @@ class LocalCompositionTests(unittest.TestCase):
         clustered = per_cell_clustering(
             frame,
             ["r_signed", "d_cell_norm", "d_nuc_norm"],
-            hdbscan_min_cluster_size=5,
+            min_segment_points=5,
             sequential_cells=10,
-            enforce_spatial_connectivity=True,
-            partition_by_nucleus=True,
             spatial_connectivity_k=4,
             spatial_min_component_size=2,
             target_sites_per_metaspot=5,
@@ -792,7 +784,6 @@ class LocalCompositionTests(unittest.TestCase):
             target_sites_per_metaspot=5,
             min_metaspots_per_cell=2,
             max_metaspots_per_cell=8,
-            partition_by_nucleus=True,
         )
         self.assertEqual(
             int(audit["nucleus_mixed_metaspots"].sum()),
@@ -802,18 +793,6 @@ class LocalCompositionTests(unittest.TestCase):
             float(audit["nucleus_mixed_transcript_fraction"].max()),
             0.0,
         )
-
-    def test_legacy_metaspot_columns_are_migrated(self):
-        legacy = pd.DataFrame(
-            {
-                "cell_sub": ["cell:0"],
-                "cluster_in_cell": [0],
-            }
-        )
-
-        migrated = _migrate_legacy_metaspot_columns(legacy)
-
-        self.assertEqual(migrated.columns.tolist(), ["metaspot", "metaspot_in_cell"])
 
     def test_module4_cache_alignment_rejects_stale_metaspot_numbering(self):
         point_df = pd.DataFrame(
@@ -938,18 +917,14 @@ class LocalCompositionTests(unittest.TestCase):
             "module1": {"use_input_nucleus_flags": False},
             "module2": {"idf_mode": "log"},
             "module3": {
-                "hdbscan_max_points": 99,
-                "sequential_cells": 7,
-                "enforce_spatial_connectivity": True,
-                "partition_by_nucleus": True,
+                "n_segmentation_features": 12,
+                "spatial_compactness": 2.0,
                 "target_sites_per_metaspot": 100,
             },
-            "module5": {"assign_chunk_size": 123, "mbk_batch_size": 17},
-            "module6": {"pool_normalize": True},
-            "module8": {"amp": False},
+            "module5": {"metadomain_q": 0.1, "lens_max_epochs": 17},
             "annotation": {
                 "method": "evidence",
-                "evidence_fdr": 0.2,
+                "evidence_axis_q": 0.2,
                 "apex_omm_specificity_filter": True,
                 "apex_omm_min_delta": 0.50,
             },
@@ -962,18 +937,12 @@ class LocalCompositionTests(unittest.TestCase):
             ]
         )
         self.assertEqual(
-            module_config_subset(cfg, "m3")["module3.hdbscan_max_points"],
-            99,
+            module_config_subset(cfg, "m3")["module3.n_segmentation_features"],
+            12,
         )
-        self.assertTrue(
-            module_config_subset(cfg, "m3")[
-                "module3.enforce_spatial_connectivity"
-            ]
-        )
-        self.assertTrue(
-            module_config_subset(cfg, "m3")[
-                "module3.partition_by_nucleus"
-            ]
+        self.assertEqual(
+            module_config_subset(cfg, "m3")["module3.spatial_compactness"],
+            2.0,
         )
         self.assertEqual(
             module_config_subset(cfg, "m3")[
@@ -982,16 +951,12 @@ class LocalCompositionTests(unittest.TestCase):
             100,
         )
         self.assertEqual(
-            module_config_subset(cfg, "m5")["module5.assign_chunk_size"],
-            123,
-        )
-        self.assertFalse(module_config_subset(cfg, "m8")["module8.amp"])
-        self.assertTrue(
-            module_config_subset(cfg, "m6")["module6.pool_normalize"]
+            module_config_subset(cfg, "m5")["module5.metadomain_q"],
+            0.1,
         )
         annotate_cfg = stage_config_subset(cfg, "annotate")
         self.assertEqual(annotate_cfg["annotation.method"], "evidence")
-        self.assertEqual(annotate_cfg["annotation.evidence_fdr"], 0.2)
+        self.assertEqual(annotate_cfg["annotation.evidence_axis_q"], 0.2)
         self.assertTrue(
             annotate_cfg["annotation.apex_omm_specificity_filter"]
         )
@@ -1043,15 +1008,8 @@ class LocalCompositionTests(unittest.TestCase):
                 point_df,
                 gmm_cols,
                 composition_model=model,
-                hdbscan_min_cluster_size=5,
-                target_sub_size=10,
-                kmeans_min_k=2,
-                kmeans_max_k=4,
-                use_k_cap=True,
-                merge_min_size=5,
-                hdbscan_max_points=1,
+                min_segment_points=5,
                 sequential_cells=10,
-                enforce_spatial_connectivity=True,
                 spatial_min_component_size=2,
                 spatial_compactness=1.0,
                 target_sites_per_metaspot=10,
@@ -1061,8 +1019,6 @@ class LocalCompositionTests(unittest.TestCase):
 
         self.assertIn("metaspot_in_cell", clustered.columns)
         self.assertIn("metaspot", clustered.columns)
-        self.assertNotIn("cluster_in_cell", clustered.columns)
-        self.assertNotIn("cell_sub", clustered.columns)
         self.assertGreaterEqual(
             clustered.loc[
                 clustered["cell_id"] == "0",
@@ -1074,7 +1030,6 @@ class LocalCompositionTests(unittest.TestCase):
 
         adata1 = build_adata1(clustered)
         self.assertEqual(adata1.n_obs, clustered["metaspot"].nunique())
-        self.assertNotIn("cell_sub", adata1.obs.columns)
 
     def test_module3_worker_does_not_capture_full_point_table(self):
         frame = _synthetic_transcripts()
@@ -1115,7 +1070,6 @@ class LocalCompositionTests(unittest.TestCase):
                 small_backend_cells=0,
                 parallel_chunk_cells=16,
                 parallel_n_jobs=2,
-                enforce_spatial_connectivity=True,
                 target_sites_per_metaspot=10,
                 min_metaspots_per_cell=2,
                 max_metaspots_per_cell=4,
@@ -1129,7 +1083,7 @@ if __name__ == "__main__":
 
 
 def test_relative_type_expression_flags_genes_of_the_other_cell_type():
-    from cellscope.spillover import relative_type_expression
+    from cellscoper.spillover import relative_type_expression
 
     rng = np.random.default_rng(0)
     rows = []

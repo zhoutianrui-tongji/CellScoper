@@ -4,7 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog (https://keepachangelog.com/en/1.0.0/) and this project adheres to Semantic Versioning.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-18
+First release under the name CellScoper; the packaged defaults are the configuration of the v1.0.0 results.
+### Changed (2026-11-17/18)
+- Default label rule `annotation.evidence_label_rule: lens_count` (`cellscoper/lens_count.py`): a gate on held-out
+  reference markers in the LENS decoder, the amount per cell side from LENS gene weights (one Otsu threshold per
+  structure), and placement within the cell by evidence and structure-axis ranks. `axis` remains available.
+- LENS defaults `module5.lens_background: own` (predict hidden genes against the cell side's own RNA) and
+  `module5.lens_absolute_position: false`.
+- `module1.remove_foreign_transcripts` stays on: on Atera BRCA 1k, switching it off left label accuracy unchanged
+  (held-out genes) but produced a MetaDomain made of fibroblast extracellular-matrix RNA from neighbouring cells.
+### Added (2026-11-18)
+- Diagnostic figures in `figures/` (01-09: foreign-transcript removal, MetaSpots, gene embedding, LENS training, LENS
+  against gene-shuffled cells, MetaDomains with their most enriched observed genes, annotation validation, label share
+  against RNA depth, example cells); a text-overlap check runs before each figure is saved.
+- LENS training curve `intermediate_results/module5_lens_training.csv` (train NLL, held-out gain and time per epoch)
+  and the kept epoch, stop reason and data split in `adata1.uns["lens"]`.
+
+## Earlier changes (2026-11-03)
+### Changed (2026-11-03 cleanup)
+- The package is renamed `cellscope` -> `cellscoper` (imports, `cellscoper` command, `CELLSCOPER_*` environment
+  variables, logger name). The `cellscope` command alias is removed.
+- `pipeline.py` is split into modules: `runtime`, `keys`, `checkpoints`, `outputs`, `geometry` (Module 1),
+  `composition` (Module 2), `metaspots` (Modules 3-4), `metadomains` (Modules 5-6), `reference` and the orchestration in
+  `pipeline`. Outputs on Atera BRCA 1k are bit-identical to the version before the cleanup.
+- Defaults (2026-11-02/03): structure-axis annotation on GE + LENS; the cell x structure table on.
+- MetaDomains (`meta-domain`) are now found from LENS without reference genes (HDBSCAN against gene-shuffled cells,
+  `module5.metadomain_q`; background `-1`), replacing the 25 MiniBatchKMeans clusters per side; `adata2` and
+  `subcellular_annotation_domain` follow them. The separate `metadomain_discovered` column, the GE + LENS concatenation
+  `X_ge_lens` and the parameters `fixed_k`, `min_domain_size`, `train_sample_per_block`, `assign_chunk_size`, `mbk_*`,
+  `lens_weight`, `metadomain_discovery` and `metadomain_discovery_q` are removed.
+- Module 3 parameters renamed: `hdbscan_min_cluster_size` -> `min_segment_points`, `n_feat_hdb` ->
+  `n_segmentation_features`.
+- The masked-transcript model is named LENS throughout: module `cellscoper/lens.py` (`lens_embedding`), parameters
+  `module5.lens_max_epochs`, `lens_spots_per_epoch`, `lens_null_cells` (were `mtm_*`), outputs `obsm["X_lens"]` and
+  `uns["lens"]` (were `X_metaspot_mtm`, `uns["metaspot_mtm"]`).
+- MetaDomain discovery combines 5 restarts (different HDBSCAN samples and cell halves); a direction must be kept in at
+  least 3 of them (`uns["metadomain_discovery"]["support"]`). Atera 5k: 4 MetaDomains for every LENS and discovery seed
+  tried (before: 0-4 depending on the discovery seed).
+- `evidence_annotation_report.json` records each structure's read-out weights (`axis_weights`: GE per scale, GE,
+  LENS and LENS's share); labels are unchanged. Atera 1k: LENS share 32-56%.
+### Removed (2026-11-03 cleanup)
+- CA-DMGI (Modules 7-8, `multiplex_dgi`, `sampled_multiplex_dgi`, `scalable_graph`) and all `module7` / `module8`
+  parameters; kNN backends and DGI training modes in the execution plan; MetaDomain pooling of representations
+  (`module6.pool_reps`).
+- The count-based annotation rule (`evidence_label_rule: legacy`, `evidence_score`, `evidence_unit`, `evidence_fdr`,
+  `evidence_null_sets`, `evidence_label_unit`).
+- Alternative MetaDomain clustering (consensus Leiden, hierarchical prototypes, automatic K, per-cell cap, cosine,
+  column standardisation, other `cluster_rep` choices) and their parameters.
+- LENS options not adopted (`mtm_fixed_tokens`, `mtm_smooth_k`, `mtm_shrink_background`, `mtm_include_absolute_position`,
+  `mtm_bind_decoder_to_ge`; `mtm_exclude_visible` is always on).
+- Module 3 HDBSCAN / KMeans segmentation (`enforce_spatial_connectivity`, `partition_by_nucleus`, `segmentation_features`
+  and the `hdbscan_*` / `kmeans_*` options); MetaSpots are always spatially constrained Ward per cell side.
+- Module 2 non-streamed and cell-summary paths (`stream_local_embeddings`, `source_from_point_df`,
+  `CELLSCOPE_CELL_SUMMARY_ONLY`, `CELLSCOPE_ULTRALOW`).
+- The marker-composition cell features (`compute_cell_features`), `gene_embedding_scale: colocalisation`,
+  `benchmarks/`, `benchmark_utils`, `plotting_style`, `config/params.fast.yaml`, `src/manual_marker.csv`, migration of
+  old checkpoint column names (`cell_sub`, `cluster_in_cell`) and other compatibility shims.
 ### Changed
 - The default reference now also contains `src/extra_reference_markers.tsv`
   (CAP-seq ER, LoRNA mitochondrion fraction for OMM, nuclear-speckle APEX-seq).

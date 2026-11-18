@@ -7,10 +7,9 @@ readme = (here / "README.md").read_text(encoding="utf-8") if (here / "README.md"
 
 _BUNDLED_FILES = (
 	(here / "config" / "params.yaml", "params.yaml"),
-	(here / "config" / "params.fast.yaml", "params.fast.yaml"),
+	(here / "config" / "params.atera_brca.yaml", "params.atera_brca.yaml"),
 	(here / "src" / "2019_CELL_APEXSeq.tsv", "2019_CELL_APEXSeq.tsv"),
 	(here / "src" / "RNALocateV3.txt", "RNALocateV3.txt"),
-	(here / "src" / "manual_marker.csv", "manual_marker.csv"),
 	(here / "src" / "extra_reference_markers.tsv", "extra_reference_markers.tsv"),
 )
 
@@ -20,25 +19,25 @@ class build_py(_build_py):
 
 	def run(self):
 		super().run()
-		target = pathlib.Path(self.build_lib) / "cellscope" / "data"
+		target = pathlib.Path(self.build_lib) / "cellscoper" / "data"
 		target.mkdir(parents=True, exist_ok=True)
 		for source, name in _BUNDLED_FILES:
 			self.copy_file(str(source), str(target / name))
 
 	def get_outputs(self, include_bytecode=1):
 		outputs = list(super().get_outputs(include_bytecode=include_bytecode))
-		target = pathlib.Path(self.build_lib) / "cellscope" / "data"
+		target = pathlib.Path(self.build_lib) / "cellscoper" / "data"
 		outputs.extend(str(target / name) for _, name in _BUNDLED_FILES)
 		return outputs
 
 setup(
 	name="CellScoper",
 	version="1.0.0",
-	description="A modular, resumable spatial transcriptomics pipeline with graph embeddings and annotation",
+	description="Subcellular structure discovery and annotation for imaging-based spatial transcriptomics",
 	long_description=readme,
 	long_description_content_type="text/markdown",
 	author="CellScoper Contributors",
-	url="https://github.com/zhoutianrui-tongji/CellScope",
+	url="https://github.com/zhoutianrui-tongji/CellScoper",
 	license="MIT",
 	packages=find_packages(),
 	cmdclass={"build_py": build_py},
@@ -51,37 +50,18 @@ setup(
 		"click>=8",
 		"pyarrow>=14",
 		"shapely>=2.0",
-		"scikit-learn>=1.2",
+		"scikit-learn>=1.3",  # sklearn.cluster.HDBSCAN (MetaDomain discovery)
 		"scipy>=1.10",
 		"joblib>=1.3",
-		"hdbscan>=0.8.33",
 		"matplotlib>=3.7",
-		"tqdm>=4.65",
-		"scanpy>=1.9",
-		"statsmodels>=0.14",
-		"seaborn>=0.12",
-		"umap-learn>=0.5",
-		"python-igraph>=0.11",
-		"leidenalg>=0.10",
 		"PyYAML>=6.0",
-		"pynndescent>=0.5",
-		"numba>=0.58",
-		"lightning>=2.1",
-		# Optional/accelerated modules
+		"threadpoolctl>=3.1",
+		# LENS (masked-transcript model); a CUDA GPU makes it practical beyond a few thousand cells
 		"torch>=2.1",
-		"torch-geometric>=2.5",
 	],
-	extras_require={
-		"scvi": ["scvi-tools>=0.20"],
-		# CPU FAISS is sufficient for sampled mode. For multi-million-node
-		# streaming runs, install a CUDA-compatible FAISS build separately so
-		# IVF-PQ add/query can execute on GPU.
-		"large-scale": ["faiss-cpu>=1.8"],
-	},
 	entry_points={
 		"console_scripts": [
-			"cellscoper=cellscope.cli:main",
-			"cellscope=cellscope.cli:main",
+			"cellscoper=cellscoper.cli:main",
 		]
 	},
 	classifiers=[

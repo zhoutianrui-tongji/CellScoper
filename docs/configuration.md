@@ -1,109 +1,196 @@
 # CellScoper Configuration Reference (params.yaml)
 
-This document describes the configuration options read from `config/params.yaml`. All fields are optional unless stated otherwise. CLI flags control only high-level workflow; module hyperparameters are configured here.
+This document describes the options read from `config/params.yaml`. All fields are optional; omitted fields take the
+defaults listed here. CLI flags control the workflow (inputs, output directory, resume); module parameters are set in
+YAML.
 
 - File path: `config/params.yaml`
-- Format: YAML (UTF‑8)
-- Scope: IO behavior, resume policy, module parameters (M1–M8), annotation, and UI/runtime hints
+- Format: YAML (UTF-8)
+- Sections: `io`, `execution`, `module1`-`module3`, `module5`, `module6`, `annotation`, `runtime`
 
 ## Loading and precedence
-- `--config` accepts YAML and is recursively merged over the packaged default.
-- The merged configuration plus CLI overrides is atomically written to
-  `effective_params.yaml`; all pipeline stages read that exact file.
-- Explicit CLI/Python arguments take precedence over YAML. After a successful
-  non-dry run, the same configuration is committed as `params_used.yaml`.
+- `--config` accepts a YAML file that is recursively merged over the packaged default; it only needs the keys it changes.
+- The merged configuration plus CLI overrides is written atomically to `effective_params.yaml`; every stage reads that
+  file (also through the `CELLSCOPER_CONFIG` environment variable). After a successful run the same configuration is
+  committed as `params_used.yaml`.
+- Explicit CLI/Python arguments take precedence over YAML.
 
 ## io
-- `final_format` (`csv|parquet`): Final table format. The shipped production
-  configuration uses `parquet`; enable `write_csv_copy` only when a CSV is
-  explicitly needed.
-- `h5ad_compression` (`lzf|gzip|None`): Compression for `.h5ad` intermediates and outputs. Default: `lzf`.
-- `lite_intermediate` (bool): Reduce intermediate artifacts written. Default: `true`.
-- `intermediate_dirname` (str): Name of the intermediate directory under output dir. Default: `intermediate_results`.
-- `resume_from` (`load_inputs|preprocess|build_anndata|annotate|write_outputs`|null): Force starting stage. Default: unset.
-- `resume_policy` (`auto|minimal|force`): Default resume behavior (CLI can override). Default: `minimal`.
-- `write_intermediate_csv` (bool): Write CSV intermediates when applicable. Default: `false`.
-- `write_intermediate_parquet` (bool): Write Parquet intermediates when applicable. Default: `false`.
-- `write_csv_copy` (bool): Also keep a CSV copy of the final table if feasible.
-  The shipped production configuration defaults to `false` to avoid duplicating
-  a gigabyte-scale table; set it to `true` when CSV is explicitly required.
-- `write_diagnostic_tables` (bool): Write compact audit tables independently
-  of large intermediate tables. Default: `false`.
-- `write_diagnostic_csv`, `write_diagnostic_parquet` (bool): Formats for
-  compact audit tables. Defaults: `false`, `false`.
-- `broadcast_metaspot_diagnostics_to_transcripts` (bool): Duplicate wide
-  MetaSpot audit columns onto every transcript. Default: `false`; MetaSpot
-  diagnostics remain available in `adata1.obs`.
-- `write_partitioned_dataset` (bool): Also write `final_data_dataset/` beside
-  the canonical final table for streaming runs. Default: `false`.
-- `drop_embeddings` (bool): Remove transcript embedding-like columns and write
-  a compact final `adata1.h5ad`. The compact file retains the canonical
-  `X_dgi_gcn_metaspot` representation needed for DGI provenance, but omits
-  auxiliary embeddings and graph matrices. Default: `false`.
-- `provenance_hash_inputs` (bool): Include exact SHA256 hashes of inputs and
-  bundled annotation references in run manifests and resume fingerprints.
-  Default: `true`.
+- `final_format` (`csv|parquet`): final transcript table format. Default: `parquet`.
+- `h5ad_compression` (`lzf|gzip|None`): compression of `.h5ad` files. Default: `lzf`.
+- `write_csv_copy` (bool): also write a CSV copy of the final table. Default: `false`.
+- `cell_structure_features` (bool): write `cell_structure_features.parquet` (needs annotation). Default: `true`.
+  See "Cell x structure table" below.
+- `write_intermediate` (bool): write checkpoints under `intermediate_dirname`. Default: `true`.
+- `lite_intermediate` (bool): keep only the checkpoints needed for resume. Default: `true`.
+- `intermediate_dirname` (str): checkpoint directory under the output directory. Default: `intermediate_results`.
+- `write_intermediate_csv`, `write_intermediate_parquet` (bool): formats of intermediate tables. Default: `false`.
+- `write_intermediate_figures` (bool): write diagnostic figures. Default: `true`.
+- `write_diagnostic_tables`, `write_diagnostic_csv`, `write_diagnostic_parquet` (bool): compact audit tables such as
+  the Module 3 segmentation audit. Default: `false`.
+- `write_partitioned_dataset` (bool): for `streaming` runs, also write `final_data_dataset/`, a cell-aligned partitioned
+  Parquet dataset with `manifest.json` and `_SUCCESS`. Default: `false`.
+- `drop_embeddings` (bool): write a compact `adata1.h5ad` that keeps only `X_lens` of the MetaSpot
+  representations. Default: `false`.
+- `provenance_hash_inputs` (bool): include SHA256 hashes of the inputs and bundled references in `run_manifest.json`
+  and the resume fingerprints. Default: `true`.
+- `resume_policy` (`auto|minimal|force`) and `resume_from`
+  (`load_inputs|preprocess|build_anndata|annotate|write_outputs`|null): see "Change impact and resume".
+- `show_sample` (bool, top level): print the first rows of each input. Default: `true`.
+
+## execution
+`profile: auto` routes from the realized MetaSpot count: `exact` up to `exact_max_metaspots` (200,000), `sampled` up to
+`sampled_max_metaspots` (2,000,000), `streaming` above (full Atera has ~32M MetaSpots). `streaming` skips full diagnostic
+tables and enables the partitioned final dataset (`io.write_partitioned_dataset`, `partition_rows` rows per part,
+default 1,000,000). The plan is written to `intermediate_results/execution_plan.json` and `adata1.uns["execution_plan"]`.
+
+## module1 (geometry)
+- `include_directional` (bool): add directional features (sin/cos of the angle around the nucleus). Default: `true`.
+- `use_input_nucleus_flags` (bool): `true` reuses the transcripts' `overlaps_nucleus`; `false` recomputes nuclear
+  membership from the nucleus polygons. Default: `false`.
+- `boundary_distance` (`vertex|edge`): `d_cell` / `d_nuc` as distance to the nearest boundary vertex (default) or to the
+  polygon edges (more accurate for polygons with few vertices).
+- `remove_foreign_transcripts` (bool) and `foreign_max_relative_expression` (float): drop transcripts that probably
+  belong to a neighbouring cell. Cells are grouped into coarse types; a transcript is dropped when its gene is expressed
+  in the cell's type at no more than this fraction (0.2) of the level in the type that expresses it most. Segmentation
+  spillover forms patches that look like subcellular structure (about 5-6% of transcripts in the tissue sections
+  tested). Default: `true`.
+- `winsor_perc_low` / `winsor_perc_high` (int): winsorization percentiles of the geometry features. Default: `1`, `99`.
+
+## module2 (local composition)
+Each transcript is described by the distance-weighted bag of the `top_g` (1024) most frequent genes among its
+`bow_knn_k` (12) nearest transcripts of the same cell, with TF normalisation (`tf_norm`) and IDF weighting
+(`use_tfidf`, `idf_mode`: `log1p|log|none`), projected to `svd_n_components` (24) dimensions by a sparse random
+projection. `bow_weight_mode` (`gaussian|inv|uniform`) weights the neighbours. The IDF is estimated on a sample of at
+most `svd_sample_cells` (5000) cells, `max_rows_per_cell_for_svd` (256) transcripts per cell and `max_svd_rows`
+(100,000) rows. The model is applied cell by cell inside Module 3, so no per-transcript embedding table is stored.
+`parallel_chunk_cells` (8) sets the cells per parallel task.
+
+## module3 (MetaSpots)
+Every cell side (nucleus, cytoplasm) is split into spatially connected MetaSpots by spatially constrained Ward
+clustering of its transcripts on standardised geometry + Module 2 features; MetaSpots never cross the nuclear boundary
+(2k-cell Xenium audit: nucleus/cytoplasm accuracy 0.896 -> 0.951 against mixed MetaSpots).
+- `target_sites_per_metaspot` (int): about one MetaSpot per this many distinct x-y sites. Default: `15`.
+- `min_metaspots_per_cell` / `max_metaspots_per_cell` (int): bounds of the per-cell MetaSpot count. Default: `20`, `1000`.
+- `use_z_location` (bool): with `z_location`, connectivity and clustering in 3D (one length scale); the MetaSpot count
+  still comes from the x-y sites. Default: `true`.
+- `n_segmentation_features` (int): the Ward features are the ones with the largest variance in the cell. Default: `24`.
+- `min_segment_points` (int): a cell side with fewer transcripts forms one MetaSpot; also the smallest component when
+  `spatial_min_component_size` is unset. Default: `30`.
+- `spatial_connectivity_k`, `spatial_radius_quantile`, `spatial_radius_factor` (8, 0.9, 1.5): the spatial graph links
+  each site to at most k neighbours within factor x the quantile of the nearest-neighbour spacing.
+- `spatial_min_component_size` (int): smaller connected pieces merge into a neighbour. Default: `5`.
+- `spatial_compactness` (float): weight of the coordinates in the Ward features. Default: `1.0`.
+- `spatial_smoothing_iterations`, `spatial_smoothing_min_fraction` (1, 0.6): majority smoothing used only when
+  constrained Ward cannot run.
+- `parallel_chunk_cells` (256), `parallel_n_jobs` (12), `small_backend_cells` (32), `sequential_cells` (32): scheduling
+  (cells per task, workers, thresholds for threads / sequential processing); they do not change the result.
+- With compact diagnostics enabled, `module3_metaspot_segmentation_audit.*` reports actual and requested MetaSpot
+  counts, sizes and nuclear mixing for every cell.
+
+## module5 (MetaSpot representation and MetaDomains)
+
+### MetaSpot representation
+Two parts, both stored in `adata1.obsm`: the spatial gene embedding (`X_gene_embedding`) and LENS (`X_lens`).
+Annotation reads both along each structure's marker direction; MetaDomains use LENS.
+
+**Spatial gene embedding** (`cellscoper/spatial_gene_embedding.py`): each gene gets a vector from within-cell gene-pair
+co-localisation; a MetaSpot is the mean of its transcripts' neighbourhood vectors.
+- `gene_embedding_scale` (`multiscale|density`): `multiscale` (default) concatenates embeddings at 3, 7 and 14 x the
+  median nearest-neighbour distance; `density` uses one scale.
+- `gene_embedding_pair_radius` / `gene_embedding_neighbour_radius` (`auto` or a number in coordinate units).
+- `gene_embedding_dim` (32 per scale), `gene_embedding_min_gene_count` (100), `gene_embedding_pseudo_count` (5.0),
+  `gene_embedding_max_cells` (20,000 cells used to fit the gene vectors).
+
+**LENS** (`cellscoper/lens.py`): a two-layer Transformer reads a MetaSpot's transcripts (frozen GE gene tokens
+plus positions) and up to 32 nearby transcripts of the same cell side, and outputs a 32-d z. Training hides 25% of the
+MetaSpot's genes and predicts them against the cell side's own composition, so z describes where the MetaSpot departs
+from its cell side; genes still visible in the input are excluded from the answer. 10% of cells are held out for early
+stopping. z is centred per cell side. A CUDA GPU is used when available (the one with the most free memory).
+- `lens_max_epochs` (200): maximum epochs (Atera 5k stops after about 70-80).
+- `lens_spots_per_epoch` (0): > 0 trains each epoch on that many random MetaSpots, so training time does not grow with
+  the data (use for full-size datasets); early stopping then counts MetaSpots seen.
+- `lens_null_cells` (10,000): after training, cells with gene identities shuffled within each cell side are encoded once;
+  annotation and the MetaDomains use them as the null.
+- `lens_background` (`own|learned`, default `own` since v1.0.0): the composition the hidden genes are predicted against.
+  `own` = the cell side's own RNA without the MetaSpot (shrunk towards the cell's low-rank profile), so LENS learns only
+  where a MetaSpot departs from its own cell, not cell-type composition; required by `evidence_label_rule: lens_count`.
+  `learned` = a learned mix of the cell's own composition, a low-rank profile and the whole-section composition.
+- `lens_absolute_position` (bool, default `false` since v1.0.0): also give LENS each transcript's radial position
+  (relative distances to the nucleus and the cell edge). With the `own` background the radial position took over z in
+  simulations; without it, only the nucleus/cytoplasm flag and positions relative to the MetaSpot are used.
+
+### MetaDomains
+MetaDomains are structure types found from LENS without reference genes (`cellscoper/metadomain_discovery.py`; until
+2026-11-03 they were 25 MiniBatchKMeans clusters per side). `random_seed` (42) seeds LENS and the discovery.
+1. z is smoothed over about 50 transcripts of neighbouring MetaSpots of the same cell side and whitened by the null's
+   covariance (`lens_null_cells`).
+2. MetaSpots whose whitened norm beats the null at false share `metadomain_q` (0.2) are detected, with
+   thresholds per side x depth quartile.
+3. HDBSCAN on the detected MetaSpots' unit directions (10 PCA dimensions, at most 20,000 MetaSpots, the same number
+   from each side) gives candidate directions; the number comes from the data.
+4. A candidate is kept when both random halves of the cells find it (mutual best, cosine >= 0.8).
+5. Steps 3-4 are repeated 5 times with different samples and cell halves; directions kept in at least 3 of the 5
+   restarts (grouped at cosine >= 0.8) become MetaDomains. A single restart depends on its sample: on Atera 5k the same z
+   gave 0-4 MetaDomains across discovery seeds; with the restarts, both LENS seeds and three discovery seeds each gave
+   the same 4 MetaDomains (decoder profile r >= .999 for the same z, .87-.94 between LENS seeds; about 80 s).
+6. Every kept direction becomes an axis with its own null threshold; a MetaSpot takes the MetaDomain whose threshold it
+   exceeds most, else stays background (-1).
+
+Nucleus and cytoplasm are clustered together: clustered per side, Atera 5k gave mirror MetaDomains on both sides of the
+2D nucleus outline, where RNA composition hardly changes. A nucleus-boundary check flags a MetaDomain whose genes follow
+the raw nucleus-cytoplasm contrast (|r| >= 0.5) while >= 20% of its MetaSpots lie on the other side of the outline; it
+reflects the outline (2D projection, segmentation) or a perinuclear gradient.
+
+Results: `adata1.obs["meta-domain"]` (-1 = background) and `"meta-domain_score"`, the `meta-domain` column of
+`final_data`, `adata2` (one row per MetaDomain and one for the background), and `adata1.uns["metadomain_discovery"]` (side, nucleus share, size, reproducibility, support over restarts, null share,
+nucleus-boundary check, decoder gene profiles and top genes). Gene-shuffled input gives no MetaDomain on Atera, HEK and
+CosMx; MetaDomains found with separately trained models matched for 78-84% (Atera) and 100% (HEK) of their MetaSpots.
+
+## module6 (MetaDomain AnnData)
+- `h5ad_compression_override` (bool): apply `io.h5ad_compression` to `adata2`. Default: `true`.
+- `save_shape_summary` (bool): save `module6_adata2_shape.*`. Default: `true`.
 
 ## annotation
+- `enable` (bool): run subcellular annotation. Default: `true`.
+- `method` (`evidence|none`): `none` skips annotation.
 
-- `enable` (bool): Run subcellular annotation. Default: `true`.
-- `method` (`evidence|none`): `evidence` is the only annotation method; `none`
-  skips annotation. The earlier RAP-X method and its parameters were removed
-  (last available at the git tag `legacy-rapx`); `method: rapx` is rejected
-  with an error.
+### Label rule
+`evidence_label_rule` (`lens_count|axis`, default `lens_count` since v1.0.0). `lens_count` (`cellscoper/lens_count.py`):
+a structure is labelled only if held-out reference markers rank above expression-matched random gene sets in the LENS
+decoder (z >= 3); the number of transcripts labelled per cell side comes from LENS gene weights along the marker
+direction (one Otsu threshold per structure over all MetaSpots of its side, so amounts are comparable across cells);
+where they go within the cell follows the mean of the evidence rank and the structure-axis score rank below. `axis`:
+labels are the MetaSpots above the structure-axis threshold described below.
 
-### Evidence annotation
-A handful of parameters and a built-in check of its own labels. For each MetaSpot it compares observed marker transcripts with
-what the owning cell's RNA mixture predicts, tests the excess against copies
-of the data with gene identities shuffled within cells, and then validates each structure by holding marker
-genes out (every gene exactly once) and asking whether they land in the
-labelled regions: the typical held-out marker gene must be more enriched there
-than the typical other gene.
+### Structure axes
+Reference markers only name a direction: the mean vector of a structure's markers minus the mean vector of all genes,
+in GE (per scale, whitened by the null) and in the LENS decoder. A MetaSpot's score is its representation on that
+direction, averaged over about `evidence_axis_smooth_transcripts` (50) transcripts of neighbouring MetaSpots of its cell
+side. Gene identities are shuffled within cell sides and the score is recomputed; a structure takes the MetaSpots above
+the lowest score where the null's share above it is at most `evidence_axis_q` (0.2) times the real share. A structure
+that never reaches this gets no MetaSpot. `evidence_axis_source` (`auto|ge|lens|ge+lens`; `auto` = ge+lens when LENS
+ran) picks the read-out. Same-area held-out marker enrichment (OR at 5% area): Atera 1k 1.53 vs 1.29 with the earlier
+count-based rule, HEK 1.22 vs 1.16, CosMx 1.21 vs 0.99, Atera 5k 1.67 vs 1.42; on gene-shuffled input it labels 0-0.9%
+of MetaSpots against 3.8-10.5%.
 
-Label columns:
+Label columns: `subcellular_annotation` (final label), `subcellular_annotation_support` (`segmentation`, `validated`,
+`unvalidated`), `subcellular_annotation_validated` (only structures that passed the held-out check),
+`subcellular_annotation_exploratory` (relaxed check), `subcellular_annotation_placed` (each structure's best MetaSpot per
+cell, display only), `subcellular_score__*` and `subcellular_q__*` (estimated false-label share at that score).
 
-- `subcellular_annotation` is the final label. Inside each cell, every
-  structure is placed on the unit with its highest score (never across the
-  nuclear boundary), so nearly every cell shows every structure. It is not
-  gated by validation.
-- `subcellular_annotation_support` grades each final label: `segmentation`
-  (Nucleus/Cytosol, from the nuclear boundary), `validated` (the structure
-  passed the held-out check in this dataset) or `unvalidated` (placed where
-  the reference genes point, without support in this dataset).
-- `subcellular_annotation_validated` keeps only structures that pass the
-  held-out check in the current dataset, after adjusting for all
-  structure/level combinations; other units are `Nucleus` or `Cytosol`.
-- `subcellular_annotation_exploratory` adds structures passing without that
-  adjustment.
-
-Every structure keeps its `subcellular_score__*` / `subcellular_q__*` columns.
-`evidence_annotation_report.json` states for each structure whether held-out
-marker genes support it; `unsupported_structures` lists those whose final
-labels are a best guess from the reference.
-
-- `evidence_score` (`marker|propagated`): count reference markers only, or
-  weight every gene by its within-cell co-localization with them. Default:
-  `propagated`.
-- `evidence_unit` (`auto|metaspot|metadomain`): unit of evidence. `auto` picks,
-  per structure, the level with the stronger held-out enrichment.
-- `evidence_fdr` (float): BH threshold for calling a unit. Raising it trades
-  held-out enrichment for coverage; the report states both. Default: `0.05`.
-- `evidence_validation_folds`, `evidence_null_sets`, `evidence_bootstrap`
-  (int): validation folds, permutation replicates for the null, cell bootstraps.
-  Defaults: `5`, `10`, `2000`.
-- `evidence_min_gene_transcripts` (int): minimum transcripts per gene within a
-  compartment. Default: `50`.
-- `evidence_marker_margin` (float): lead a reference gene needs over its
-  second-best compartment to count as a marker. Default: `0.2`.
-- `evidence_min_resolution` (float): if the split-half Spearman correlation of
-  gene nuclear preference is below this, the data are judged not to resolve
-  subcellular localization and only Nucleus/Cytosol is reported. Default:
-  `0.3`.
+### Held-out validation (reported, does not change labels)
+Every marker gene is held out once (`evidence_validation_folds`, 5): it is then neither a neighbour in the MetaSpot
+vectors nor part of a marker direction, and its enrichment in the labelled MetaSpots is compared with other genes
+(`evidence_bootstrap` 2000 resamples, `evidence_axis_validation_cells` 3000 cells, genes with at least
+`evidence_min_gene_transcripts` 50 transcripts). `evidence_max_cells` (10,000) bounds the cells used to set thresholds;
+scores and labels cover every cell. `evidence_marker_margin` (0.2) is the lead a reference gene needs over its second
+structure to count as a marker. `evidence_min_resolution` (0.3): if the split-half Spearman correlation of gene nuclear
+preference is below it, only Nucleus/Cytosol is reported. `evidence_seed` (0).
 
 ### Reference
-Without `--gold-data`, the reference is the bundled APEX-seq atlas (Fazal et
-al. 2019) merged with RNALocate v3, plus `src/extra_reference_markers.tsv`:
-gene lists that raised held-out marker enrichment on tissue Xenium data.
+Without `--gold-data`, the reference is the bundled APEX-seq atlas (Fazal et al. 2019) merged with RNALocate v3, plus
+`src/extra_reference_markers.tsv`:
 
 | Structure | Source | Genes |
 |---|---|---|
@@ -111,382 +198,68 @@ gene lists that raised held-out marker enrichment on tissue Xenium data.
 | OMM | LoRNA mitochondrion fraction (Villanueva et al. 2024, Nat Methods 21:60) | 236 |
 | Nuclear Speckle | APEX-seq of SRSF1/SRSF7/RNPS1 (Barutcu et al. 2022, Mol Cell 82:1035) | 289 |
 
-Nuclear speckles are an eighth label; the other sources do not contain it. The
-structures are therefore Nucleus, Nucleolus, Lamina, Nuclear Pore, Nuclear
-Speckle, Cytosol, ER and OMM. A structure with no marker gene in the panel is
-not placed and is listed under `structures_without_markers` in the report. The
-OMM lists (APEX-seq and LoRNA) are dominated by secretory-pathway genes, not
-by genes encoding mitochondrial proteins. A user-supplied `--gold-data` table
-is used as given, without the extra markers.
+When the data measure at least four mitochondrially encoded RNAs (`MT-*`), they replace the OMM markers. A structure
+with no marker gene in the panel is not labelled and is listed under `structures_without_markers`.
+`reference_exclude_genes_file` (path) removes listed genes from the reference, e.g. to keep them for an independent check.
+A user-supplied `--gold-data` table is used as given.
 
-### Held-out reference validation
-- `annotation.reference_exclude_genes_file` (path, optional): Text file with
-  one gene symbol per line. Listed genes are removed from the APEX/RNALocate
-  (or user-supplied) reference before annotation, so their localization can
-  be used as an independent check of the resulting labels. See
-  `benchmarks/evaluate_run.py`. Default: unset.
+## Cell x structure table
+`io.cell_structure_features: true` writes `cell_structure_features.parquet` (`cellscoper/cell_features.py`): one row per
+cell side and structure label (and MetaDomain) with
+- `metaspot_share`, `transcript_share`: share of the side's MetaSpots / transcripts carrying the label (amount; rises
+  with transcript depth, so compare cell types at matched depth);
+- `pairs`, `pair_obs`, `pair_exp`, `concentration`: neighbour pairs of different genes within the middle GE radius,
+  weighted by each gene's non-negative loading on the structure's GE direction (MetaDomains: the positive part of their
+  decoder profile), over the expectation with gene names shuffled in the cell side. The ratio has no depth bias in
+  expectation but is noisy per cell; compare groups with `pooled_concentration` (sum `pair_obs` / sum `pair_exp`). It
+  measures arrangement: a structure that fills the cell (ER in plasma cells, Atera 5k) has a large share and a ratio
+  near 1.
 
-## module1 (Geometry features)
-- `knn_k` (int): Neighborhood size for geometry context. Default: `32`.
-- `include_directional` (bool): Add directional features (sin/cos). Default: `true`.
-- `use_input_nucleus_flags` (bool): If `true`, reuse transcript-level
-  `overlaps_nucleus`; if `false`, recompute nuclear membership from the
-  supplied nucleus polygon. Benchmark configurations should normally use
-  `false` to avoid treating a simulated truth column as a model input.
-  Packaged default: `false`.
-- `boundary_distance` (`vertex|edge`): How `d_cell`/`d_nuc` are measured.
-  `vertex` (default, historical behavior) uses the nearest boundary vertex;
-  `edge` uses the exact distance to the polygon edges, which is more accurate
-  when boundary polygons have few vertices. Changing it reruns from Module 1.
-- `remove_foreign_transcripts` (bool): Drop transcripts that probably belong to
-  a neighbouring cell before any analysis. Cells are grouped into coarse types;
-  a transcript is dropped when its gene is expressed in the cell's type at no
-  more than `foreign_max_relative_expression` (default `0.2`) of the level in
-  the type that expresses it most. Mis-segmented neighbour transcripts form
-  patches that look like subcellular structure, so this is on by default
-  (about 5-6% of transcripts in the tissue sections tested). It can be turned
-  off for sparse cultured cells that do not touch. Default: `true`. Changing it
-  reruns from preprocessing.
-- `winsor_perc_low`/`winsor_perc_high` (int, 0–100): Winsorization percentiles. Default: `1`, `99`.
-
-## module2 (Composition embeddings)
-- `top_g` (int): Vocabulary size (top genes). Default: `1024`.
-- `bow_knn_k` (int): Neighborhood size for BoW. Default: `12`.
-- `max_rows_per_cell_for_svd` (int): Per-cell TF rows cap for SVD sample. Default: `256`.
-- `max_svd_rows` (int): Global TF rows cap for SVD sample. Default: `100_000`.
-- `svd_n_components` (int): Latent dimensionality. Default: `24`.
-- `bow_weight_mode` (`gaussian|uniform`): Neighbor weighting. Default: `gaussian`.
-- `use_tfidf` (bool), `tf_norm` (bool): SVD weighting and TF normalization. Default: `true`, `true`.
-- `parallel_chunk_cells` (int): Grouping factor for parallel TF blocks. Default: `8`.
-- `stream_local_embeddings` (bool): Compute transcript-level neighborhood expression inside Module 3 one cell at a time instead of storing dense embedding columns for all transcripts. Default: `true`.
-
-## module3 (Per-cell MetaSpot segmentation)
-- `parallel_chunk_cells` (int): Number of cells dispatched at a time through
-  Module 3's persistent worker pool. Default: `256`; this controls scheduling
-  overhead and does not change the requested MetaSpot count.
-- `parallel_n_jobs` (int): Module 3 worker count, bounded by `runtime.n_jobs`
-  and the process CPU affinity. Set `0` to use the conservative eight-worker
-  automatic cap.
-  Nested BLAS/OpenMP pools are limited to one thread during this block.
-  Default: `12`.
-- `hdbscan_min_cluster_size` (int): Minimum subcluster size. Default: `30`.
-- `hdbscan_allow_single_cluster` (bool): Allow single-cluster HDBSCAN. Default: `true`.
-- `hdbscan_min_samples_frac` (float): Fraction of min_cluster_size for `min_samples`. Default: `0.2`.
-- `kmeans_min_k`/`kmeans_max_k` (int): Bounds for KMeans fallback. Default: `2`, `50`.
-- `merge_min_size` (int): Merge clusters smaller than this threshold. Default: `20`.
-- `enforce_spatial_connectivity` (bool): Build every final `metaspot` as a connected XY region using spatially constrained Ward clustering.
-- `partition_by_nucleus` (bool): Allocate the cell-level MetaSpot budget
-  across nucleus and cytoplasm before clustering. When enabled, a MetaSpot
-  cannot cross the nuclear boundary. Packaged default: `true`; without it a
-  boundary-straddling MetaSpot takes the majority compartment and mislabels
-  the minority transcripts.
-- `target_sites_per_metaspot` (int|null): Target number of unique XY sites per MetaSpot. When set, this determines the requested per-cell K before connected-component merging and bypasses HDBSCAN as the primary segmenter. Packaged default: `20`.
-- `min_metaspots_per_cell` (int): Lower bound for the requested per-cell K. Packaged default: `10`.
-- `max_metaspots_per_cell` (int|null): Upper bound for the per-cell K. Default: `100`.
-- `spatial_connectivity_k` (int): Maximum nearby XY neighbors considered when constructing the local spatial graph. Default: `8`.
-- `spatial_radius_quantile` (float): Quantile of per-site nearest-neighbor distances used to estimate native point spacing. Default: `0.9`.
-- `spatial_radius_factor` (float): Multiplier applied to the estimated point spacing for the graph radius. Default: `1.5`.
-- `spatial_smoothing_iterations` (int): Local majority-smoothing passes used only if constrained Ward clustering cannot run. Default: `1`.
-- `spatial_smoothing_min_fraction` (float): Minimum weighted neighbor fraction required to change a site's preliminary label in that fallback. Default: `0.6`.
-- `spatial_min_component_size` (int): Connected components smaller than this transcript count are merged across their strongest shared boundary. Default: `5`.
-- Module 3 writes `module3_metaspot_segmentation_audit.csv` when compact
-  diagnostics are enabled. It reports actual/requested MetaSpot counts, size
-  distributions, and nuclear-mixing rates for every cell.
-
-- `spatial_compactness` (float): Weight of standardized XY coordinates in the spatially constrained Ward clustering. Larger values make MetaSpots more compact; `0` uses features only while still restricting merges to spatial neighbors. Default: `1.0`.
-- `hdbscan_*`, `target_sub_size`, and `kmeans_*`: Legacy fallback controls used when `target_sites_per_metaspot` is null or spatial connectivity is disabled.
-
-## Fast exploratory overlay
-
-`config/params.fast.yaml` is a partial configuration merged over the packaged
-defaults by the CLI:
-
-```bash
-cellscoper ... --config config/params.fast.yaml
-```
-
-It opts into PyNNDescent for the exact-scale expression graph, caps CA-DMGI at
-120 epochs, uses two consensus seeds, and disables UMAP/diagnostic figures.
-This is intended for iteration and can change graph edges, embeddings, and
-MetaDomains. The default `params.yaml` remains the production profile.
-
-## module5 (Meta-domain clustering)
-- `block_size` (int): Chunk size for processing. Default: `50000`.
-- `clustering_method` (`consensus_leiden|minibatch_kmeans`): MetaDomain
-  clustering backend. The packaged default is `consensus_leiden`: it builds a
-  mutual-kNN graph in `X_dgi_gcn_metaspot`, runs every configured resolution
-  and random seed, chooses the best stable candidate subject to size and
-  cross-cell recurrence constraints, and consolidates assignments using
-  sparse edge-level co-association. `minibatch_kmeans` is retained for legacy
-  reproduction and ablation.
-- `consensus_neighbors` (int): Neighbors used for the mutual-kNN graph.
-  Default: `20`.
-- `consensus_resolutions` (list[float]) and `consensus_seeds` (list[int]):
-  resolution grid and independent Leiden seeds. Packaged defaults:
-  `[1, 2, 4, 6, 8]` and `[17, 42, 89]`.
-- `consensus_min_average_size`/`consensus_max_average_size` (float): feasible
-  average MetaDomain-size interval. Packaged defaults: `100/800` MetaSpots.
-- `consensus_min_recurrence_cells` (int),
-  `consensus_max_small_cluster_fraction` (float), and
-  `consensus_max_nonrecurrent_fraction` (float): reject resolutions dominated
-  by tiny or single-cell-specific clusters. Defaults: `2`, `0.10`, `0.10`.
-- `consensus_edge_agreement` (float): fraction of seed runs that must place
-  both endpoints of a mutual-kNN edge in the same cluster before that edge is
-  retained in the consensus graph. Default: `2/3`.
-- `consensus_min_stability` (float) and `consensus_stability_tolerance`
-  (float): retain the finest feasible candidate no more than `0.10` below the
-  best feasible ARI. This avoids choosing a biologically uninformative coarse
-  partition for a tiny numerical stability advantage. `consensus_min_stability`
-  (`0.55`) is reported, not enforced: when the selected resolution falls below
-  it, a warning is logged and `stability_floor_met` is `false` in the stored
-  metadata. Using it as a hard gate made identical runs switch resolution,
-  because seed-pair ARIs carry a few hundredths of noise.
-- Consensus evidence is stored in
-  `adata1.uns["module5_metadomain_clustering"]["consensus_by_block"]` and, when
-  diagnostics are enabled, in `metadomain_consensus_leiden_diagnostics.png`
-  plus `module5_consensus_leiden_diagnostics.*`.
-- `w_gc`/`w_expr`/`w_sp` (float): Feature weights (geometry, expression, spatial). Packaged default: `0.4/0.4/0.2`.
-- `use_gc`/`use_expr`/`use_spatial_feats`/`use_decell`/`use_cosine` (bool): Feature toggles. Defaults: `true/true/true/true/true` (spatial feats default may vary by build).
-- `speed_preset` (`ultra|fast|balanced`): Internal speed/accuracy presets. Default: `ultra`.
-- `enable_cap` (bool): Per-cell cap enabled. Default: `true`.
-- `min_domain_size` (int): Clusters smaller than this are merged into the nearest sufficiently sized center after final assignment. Default: `5`.
-- Legacy MiniBatchKMeans K estimation (used only when
-  `clustering_method: minibatch_kmeans`):
-  - `estimate_k` (`auto|sampled_knee|legacy_auto|fixed`): Strategy. `auto` and `sampled_knee` are aliases for bounded, cell-stratified MiniBatchKMeans search. `legacy_auto` restores the historical count-only heuristic. Default: `auto`.
-  - `fixed_k` (int): Used when `estimate_k=fixed`. Default: `1024`.
-  - `auto_k_min`/`auto_k_max` (int): Hard candidate bounds for sampled-knee selection. Defaults: `20/8000`.
-  - `auto_k_min_average_size`/`auto_k_max_average_size` (int): Candidate K values are constrained so the expected average MetaDomain contains between these many MetaSpots. Defaults: `20/500`.
-  - `auto_k_n_candidates` (int): Number of logarithmically spaced K candidates. Default: `8`.
-  - `auto_k_train_sample`/`auto_k_validation_sample` (int): Maximum cell-stratified train and held-out validation sizes. Defaults: `50000/3000`.
-  - `auto_k_sample_seed` (int), `auto_k_seeds` (list[int]): Reproducible sampling seed and MiniBatchKMeans stability seeds. Defaults: `2026` and `[42, 43]`.
-  - `auto_k_stability_min` (float): Minimum held-out adjusted Rand agreement between seeds. If the distortion-knee candidate fails, selection backs off to a smaller feasible K. Default: `0.4`.
-  - `auto_k_max_small_cluster_fraction` (float): Maximum sampled/full-evaluation point fraction assigned to clusters expected to fall below `min_domain_size`. Default: `0.01`.
-  - `auto_k_min_train_per_cluster` (int): Candidate K cannot exceed the training sample size divided by this value. Default: `10`.
-  - `auto_k_batch_size`/`auto_k_max_iter` (int): Search-only MiniBatchKMeans controls. Defaults: `2048/30`.
-  - `auto_k_full_eval_max` (int): Candidate occupancy is evaluated on all MetaSpots up to this size and on the bounded sample above it. Default: `100000`.
-  - `target_sub_per_cluster`, `target_cluster_per_cell`, and `K_min`: Legacy controls used only by `estimate_k=legacy_auto`. `K_max` remains a backward-compatible upper bound when `auto_k_max` is omitted.
-  - The selected K and all candidate distortion/stability/occupancy diagnostics are written to `adata1.uns["module5_metadomain_clustering"]["k_selection"]`.
-  - When intermediate figures are enabled, Module 5 writes `metadomain_k_selection_diagnostics.png` plus `module5_k_selection_diagnostics.*` with the plotted candidate-level evidence.
-- Nucleus/cytoplasm split:
-  - `split_by_nucleus` (bool), `nucleus_threshold` (float).
-- Per-cell cap:
-  - `cap_ratio_base` (float), `cap_min_keep` (int), `cap_margin_tau` (float), `cap_max_frac_soft` (float).
-
-## module6 (Aggregation to adata2)
-- `h5ad_compression_override` (bool): Respect IO compression override for `adata2`. Default: `true`.
-- `save_shape_summary` (bool): Save `module6_adata2_shape.*`. Default: `true`.
-
-Each run writes `OUTPUT_GUIDE.md` at the output root, listing the production
-files, the annotation columns and the diagnostics that were produced.
-
-Every CLI run writes `run_manifest.json` with status, effective configuration
-hash, input/reference identity, source-tree identity, runtime overrides, and
-actual output paths. Annotation failures are fatal when annotation is enabled;
-the pipeline will not label an unannotated or stale result as successful.
-
-## module7 (Graph construction and expression latent)
-- `graph_unit` is an internal compatibility field derived from
-  `module8.dgi_unit`. New configurations should leave it as `auto`.
-- `scvi_epochs` (int), `scvi_n_latent` (int), `scvi_lr` (float), `scvi_batch_size` (int): SCVI training params.
-- `rep_priority` (list[str]): Representation preference for annotation: `X_dgi_gcn`, `X_dgi_sage`, `X_expr`, `X_pca`.
-- `neighbors.k_expr`/`neighbors.k_geom` (int): k for expression/geometry graphs. Default: `15/15`.
-- `alpha_expr`/`alpha_geom` (float): Fusion weights. Default: `0.5/0.5`.
-- `same_cell_beta` (float): Bias for same-cell edges. Default: `0.5`.
-- `topk_prune` (int): Row-wise top-k pruning of edges. Default: `32`.
-- `edge_norm` (`rw|gcn|none`): Edge normalization. Default: `rw`.
-- `feature_scale` (`standard|none`): Feature scaling mode. Default: `standard`.
-- `knn_backend` (`auto|exact|pynndescent|faiss_hnsw|faiss_ivfpq`): kNN
-  backend selected by the scale-aware execution plan. In the exact/full-batch
-  profile, `auto` keeps the historical exact sklearn graph; an explicit
-  `pynndescent` or `faiss_hnsw` opts into approximate graph membership while
-  retaining full-batch DGI. `faiss_ivfpq` remains streaming-only.
-- In MetaSpot mode, `neighbors.k_expr` and `neighbors.k_spatial` control two
-  separately retained relation graphs:
-  `obsp["metaspot_expr_connectivities"]` and
-  `obsp["metaspot_spatial_connectivities"]`.
-- `metaspot_expr_cross_cell_only` (bool): remove same-cell edges from the
-  expression relation after expression-neighbor construction. The packaged
-  CA-DMGI configuration sets this to `true`, so cross-cell reproducibility and
-  within-cell spatial continuity cannot collapse into the same edge type.
-- `metaspot_expr_n_components` (int): expression SVD/PCA dimension used for
-  expression-neighbor discovery. Packaged default: `32`.
-- `metaspot_use_geometry_features` (bool): append robust MetaSpot geometry to
-  node features. Relation membership still comes from expression or spatial
-  adjacency; geometry is not used as an annotation label.
-
-## module8 (DGI embeddings)
-- `dgi_unit` (`metadomain|metaspot`): Single switch controlling the DGI
-  observation unit and module order. Packaged default: `metaspot`.
-  - `metadomain`: run M5/M6 first, then train DGI on `adata2`. This is the
-    scalable alternative for large datasets.
-  - `metaspot`: train DGI on `adata1`, use
-    `X_dgi_gcn_metaspot` for M5 clustering, and pool it into `adata2`.
-    `module7.max_full_batch_nodes` is a hard safety limit; the current
-    implementation does not silently fall back or pretend that an oversized
-    MetaSpot graph completed. Its packaged default is `200000`; raising it
-    only disables the guard and does not reduce full-batch memory cost.
-- `dgi_framework` (`cell_aware_dmgi|standard_dgi`): training objective. The
-  packaged default, `cell_aware_dmgi`, uses two relation-specific residual GCN
-  encoders: the cross-cell expression graph and the within-cell spatial graph.
-  Each branch optimizes a local Infomax discriminator against features
-  permuted within the same owning cell. Thus no real MetaSpot is declared a
-  biological negative. A bounded node-wise gate combines the two embeddings
-  into the public compatibility key `X_dgi_gcn_metaspot`; branch embeddings
-  are retained as `X_dmgi_expression_metaspot` and
-  `X_dmgi_spatial_metaspot`. `standard_dgi` retains the historical single-graph
-  implementation for ablation and old configurations.
-- `dmgi_expression_graph_key`/`dmgi_spatial_graph_key` (str): explicit
-  relation-graph keys. Defaults: `metaspot_expr_connectivities` and
-  `metaspot_spatial_connectivities`.
-- `dmgi_expression_weight`/`dmgi_spatial_weight` (float): relation-specific
-  Infomax weights. Both default to `1.0`.
-- `dmgi_consensus_weight` (float): alignment weight between the gated
-  consensus and both relation embeddings. Default: `0.1`.
-- `dmgi_gate_floor` (float): lower bound for either relation's node-wise gate;
-  `0.1` constrains expression and spatial contributions to `[0.1, 0.9]` and
-  prevents silent branch collapse.
-- `dmgi_fused_corruption_pass` (bool): propagate the positive and within-cell
-  corrupted views together so each relation/layer scans its sparse edges once
-  instead of twice. Default: `true`. With dropout disabled this is numerically
-  identical to the separate-pass implementation; with dropout enabled it
-  preserves the same objective and independent dropout sampling.
-- `dmgi_early_stopping`, `dmgi_min_epochs`, `dmgi_patience`, and
-  `dmgi_min_delta`: EMA-based stopping controls. The packaged configuration
-  uses `true`, `40`, `15`, and `1e-4`; `dgi_epochs: 200` is the maximum rather
-  than a mandatory run length.
-- `dgi_epochs` (int): Maximum training epochs. Packaged default: `200`.
-- `enable_dgi_sage` (bool): Train SAGE variant in addition to GCN. Default: `false`.
-- `dgi_encoder` (`residual|plain`): Encoder architecture. `residual` uses an
-  input projection, initial-feature injection, residual graph-convolution
-  blocks, and optional LayerNorm. `plain` preserves the historical sequential
-  GCN. Default: `residual`.
-- `dgi_layers` (int): Number of graph message-passing layers. This is also the
-  graph receptive-field depth; increasing it is not equivalent to adding only
-  feature-transform capacity. Default: `2`.
-- `dgi_hidden`/`dgi_out` (int): Hidden and output dimensions. Default:
-  `64/32`. To reproduce embeddings produced before the residual-encoder
-  update, set `dgi_encoder: plain`, `dgi_layers: 2`, `dgi_dropout: 0.0`, and
-  `dgi_out: 64` together.
-- `dgi_dropout` (float): Dropout used by the encoder. Default: `0.1`.
-- `dgi_residual_alpha` (float): Fraction of the initial projected features
-  injected into every residual graph block. Default: `0.1`.
-- `dgi_layer_norm` (bool): Apply LayerNorm after residual graph blocks.
-  Default: `true`.
-- `dgi_device` (`auto|cpu|cuda`): execution device. `auto` selects CUDA only
-  when the installed PyTorch build and driver expose an available device.
-  Explicit `cuda` fails fast instead of silently running on CPU.
-- `dgi_cpu_threads` (int): PyTorch intra-op threads used by DGI on CPU. `0`
-  auto-selects up to 32 CPUs from the process affinity; positive values are
-  explicit overrides. This is independent from preprocessing `blas_threads`.
-- `dgi_sparse_layout` (`auto|csr|coo`): sparse relation-graph storage for
-  CA-DMGI. `auto` uses CSR with compact native SciPy indices; `coo` is a
-  compatibility fallback.
-- `dgi_tf32` (bool): allow TF32 dense matrix multiplication on supported CUDA
-  hardware. Sparse graph values and model outputs remain float32.
-- `dgi_corruption_mode` (`auto|global|same_cell`): Negative-view feature
-  corruption. In MetaSpot mode, `auto` uses a non-self permutation within each
-  `cell_id`, so the discriminator must learn subcellular organization rather
-  than relying on easy between-cell expression differences. In MetaDomain
-  mode, `auto` uses the historical global permutation. This switch belongs to
-  the `standard_dgi` fallback; CA-DMGI always records same-cell corruption.
-- `dgi_local_loss_weight` (float): Weight of an unsupervised local edge
-  contrastive loss added to standard DGI. Positive pairs are graph edges;
-  negative pairs are non-edges from the same cell when `cell_id` is available.
-  Packaged default: `0.0`, because a same-cell non-edge may still represent the
-  same biological structure. Set it explicitly only for the legacy ablation.
-- `dgi_local_temperature` (float): Cosine-logit temperature for the local
-  contrastive term. Default: `0.2`.
-- `dgi_local_samples` (int): Maximum positive edges sampled once per training
-  run for the local term. Default: `65536`.
-- `dgi_local_graph_key` (`auto` or an `obsp` key): With `auto`, prefer
-  `metaspot_spatial_connectivities` and otherwise use the main DGI graph.
-  Default: `auto`.
-- `dgi_cpu_backend` (`auto|torch_csr|pyg`): CPU GCN execution backend. `auto`
-  uses the equivalent pre-normalized PyTorch CSR SpMM path on CPU and retains
-  PyG on GPU for `standard_dgi`; `pyg` restores the legacy COO scatter
-  implementation. CA-DMGI uses `dgi_sparse_layout` instead.
-- `dgi_lr` (float), `dgi_weight_decay` (float), `dgi_clip_grad` (float): Optimizer settings.
-
-The packaged configuration deliberately keeps two propagation layers. CA-DMGI
-is fully unsupervised: it uses expression, geometry, cell ownership and spatial
-adjacency, but never final subcellular labels. Model selection should therefore
-use cross-seed/cross-cell clustering stability, representation ablations and
-downstream evidence support—not visual UMAP separation or training loss alone.
-`module8_ca_dmgi_training.png` reports both relation losses and the gate
-trajectory; exact histories, graph keys, corruption semantics and gate metrics
-are stored under `adata1.uns["dgi_embeddings"]` and exported to
-`module8_ca_dmgi_training_history.*`/`module8_ca_dmgi_summary.*`. To reproduce
-the historical single-graph objective, set `dgi_framework: standard_dgi`,
-`dgi_corruption_mode: global`, and `dgi_local_loss_weight: 0.0`.
-
-`module5.cluster_rep`, `module6.pool_reps`, and `module7.graph_unit` are
-materialized automatically in `effective_params.yaml`. Legacy configurations
-that only set `module7.graph_unit` remain supported.
+Atera 5k: 38 s with 32 jobs for 5000 cells; depth-matched ER share was higher in plasma cells than in T cells
+(+0.098, 95% CI 0.061-0.144).
 
 ## runtime (parallelism)
-- `n_jobs` (int): Preferred worker count for parallel sections (honored unless `CELLSCOPE_N_JOBS` env is set).
-- `joblib_backend` (`threading|loky`): Backend for joblib blocks (env `CELLSCOPE_JOBLIB_BACKEND` still wins).
-- `blas_threads` (int): Caps BLAS/OpenMP thread pools; applied at startup and optionally via `threadpoolctl`. CellScoper forces this to `1` when a multi-worker `threading` backend is active, because OpenBLAS is not safe under nested application threading.
-- `numba_threads` (int): Import-time Numba/PyNNDescent thread ceiling. With a multi-worker `threading` backend, CellScoper caps this so `n_jobs * numba_threads` does not exceed the bundled OpenBLAS thread-metadata limit.
-- `scanpy_n_jobs` (int): Scanpy neighbor-graph workers, capped at the resolved `numba_threads` value. `SCANPY_N_JOBS` remains an environment override but is subject to the same cap.
-- `use_threadpoolctl` (bool): If true and `blas_threads` is set, also call `threadpoolctl.threadpool_limits`.
-- `neighbors_n_jobs` (int): Reserved for neighbor graph overrides (falls back to `n_jobs`).
-
-## ui
-- `show_sample` (bool): Show top-5 preview of inputs at start. Default: `true`.
-- `progress_style` (`rich|plain`): Output style hint for CLI progress.
+- `n_jobs` (int): worker count for parallel sections (`CELLSCOPER_N_JOBS` overrides).
+- `joblib_backend` (`threading|loky`): joblib backend (`CELLSCOPER_JOBLIB_BACKEND` overrides).
+- `blas_threads` (int): BLAS/OpenMP thread cap, set before numpy is imported; forced to 1 with a multi-worker
+  `threading` backend, because OpenBLAS is not safe under nested application threads.
+- `numba_threads` (int): import-time Numba thread ceiling. `scanpy_n_jobs` (int): value of `SCANPY_N_JOBS` set at
+  import, for downstream analysis in the same process (the pipeline does not use scanpy).
+- `use_threadpoolctl` (bool): also apply `blas_threads` through `threadpoolctl`.
 
 ## Environment variables
-- `CELLSCOPE_N_JOBS` (int): Override parallel job count for selected blocks.
-- `CELLSCOPE_CLUSTER_CHUNK` (int): Chunk size for clustering batches (default ~32–128).
+- `CELLSCOPER_CONFIG`: effective configuration file (set by the CLI).
+- `CELLSCOPER_N_JOBS`, `CELLSCOPER_JOBLIB_BACKEND`: override `runtime.n_jobs` / `runtime.joblib_backend`.
+- `CELLSCOPER_CLUSTER_CHUNK`: cells per Module 3 batch.
+- `CELLSCOPER_FORCE_THREADS`: run Module 3 with threads instead of processes.
 
 ## Examples
 
-Minimal (CSV output, defaults):
+CSV output with defaults:
 ```yaml
 io:
   final_format: csv
-annotation:
-  enable: true
 ```
 
-Parquet output + strong pruning + faster DGI:
+Finer MetaSpots (as in `config/params.atera_brca.yaml`):
 ```yaml
+module3:
+  target_sites_per_metaspot: 6
+```
+
+Full-size dataset (LENS trained on a fixed number of MetaSpots per epoch, partitioned final table):
+```yaml
+module5:
+  lens_spots_per_epoch: 1000000
 io:
-  final_format: parquet
-  h5ad_compression: lzf
-  lite_intermediate: true
-module7:
-  topk_prune: 16
-module8:
-  dgi_unit: metadomain
-  dgi_epochs: 60
-  enable_dgi_sage: false
-```
-
-MetaSpot-first DGI for a dataset below the configured full-batch node limit:
-```yaml
-module8:
-  dgi_unit: metaspot
-module7:
-  max_full_batch_nodes: 200000
-```
-
-Resume controls in YAML (can also use CLI):
-```yaml
-io:
-  resume_policy: minimal
-  resume_from: build_anndata
+  write_partitioned_dataset: true
 ```
 
 ## Change impact and resume
-- The pipeline fingerprints module-relevant parts of the YAML. With `--resume-policy minimal`, it reruns from the earliest affected stage.
-- First full run prints `Module X · Done` (no suffix). Subsequent runs show `(cache|recomputed)`.
+The pipeline fingerprints the configuration keys of each stage and module (`cellscoper/config.py`). With
+`resume_policy: minimal` it reruns from the earliest stage whose keys, inputs or schema changed; `force` reruns
+everything; `auto` continues after the last completed stage. `resume_from` starts from a named stage. The first full run
+prints `Module X · Done`; later runs add `(cache)` or `(recomputed)`. `--dry-run-diff` shows which stage would rerun.
 
-## Troubleshooting
-- Changes not taking effect: ensure `resume_policy` is `minimal` or use `--resume-policy minimal` and/or remove the output directory.
-- Missing dependencies (e.g., `scanpy`/`scvi-tools`): the pipeline will use fallback paths (e.g., SVD/NN); adjust epochs or disable annotation if needed.
-- Large runs: use `module8.dgi_unit: metadomain` when the expected number of
-  MetaSpots exceeds `module7.max_full_batch_nodes`. Lowering epochs does not
-  remove the full adjacency/feature memory requirement. MetaSpot-DGI above the
-  limit requires a sampled or mini-batch graph implementation.
+Every CLI run writes `run_manifest.json` with status, effective configuration hash, input and reference identity,
+source-tree identity and output paths. Annotation failures are fatal when annotation is enabled.

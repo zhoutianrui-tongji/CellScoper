@@ -5,26 +5,11 @@ rich>=13
 click>=8
 pyarrow>=14
 shapely>=2.0
-scikit-learn>=1.2
+scikit-learn>=1.3
 scipy>=1.10
 joblib>=1.3
-hdbscan>=0.8.33
 matplotlib>=3.7
-tqdm>=4.65
-scanpy>=1.9
-python-igraph>=0.11
-leidenalg>=0.10
-statsmodels>=0.14
-seaborn>=0.12
-umap-learn>=0.5
-lightning>=2.1
 PyYAML>=6.0
-# Optional performance accelerators (recommended)
-pynndescent>=0.5
-numba>=0.58
-# Deep learning + graph embeddings (required for Module 8 DGI)
+threadpoolctl>=3.1
+# LENS (masked-transcript model); a CUDA GPU makes it practical beyond a few thousand cells
 torch>=2.1
-torch-geometric>=2.5
-# Expression latent is optional (Module 7 tries SCVI then falls back to SVD):
-#   pip install -e '.[scvi]'
-    
